@@ -22,7 +22,7 @@ app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 import isaaclab.sim as sim_utils
-from isaaclab.assets import AssetBaseCfg, RigidObjectCfg
+from isaaclab.assets import AssetBaseCfg
 from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.utils import configclass
 
@@ -41,18 +41,10 @@ class NewElevatorSceneCfg(InteractiveSceneCfg):
     )
 
     # elevator
-    elevator: RigidObjectCfg = RigidObjectCfg(
-        prim_path="/World/Elevator", 
+    elevator = AssetBaseCfg(
+        prim_path="/World/Elevator",
         spawn=sim_utils.UsdFileCfg(
-            usd_path=ELEVATOR_ASSET_PATH,
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(
-                kinematic_enabled=True,
-                disable_gravity=True,
-            ),
-        ),
-        init_state=RigidObjectCfg.InitialStateCfg(
-            pos=(0.0, 0.0, 0.0),
-            rot=(1.0, 0.0, 0.0, 0.0),
+            usd_path=ELEVATOR_ASSET_PATH
         ),
     )
 
