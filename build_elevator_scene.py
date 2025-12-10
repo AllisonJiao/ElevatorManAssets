@@ -42,7 +42,7 @@ class NewElevatorSceneCfg(InteractiveSceneCfg):
 
     # elevator
     elevator: RigidObjectCfg = RigidObjectCfg(
-        prim_path="World/Elevator", 
+        prim_path="/World/Elevator", 
         spawn=sim_utils.UsdFileCfg(
             usd_path=ELEVATOR_ASSET_PATH,
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
