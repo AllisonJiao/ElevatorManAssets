@@ -26,7 +26,7 @@ from isaaclab.assets import AssetBaseCfg, RigidObjectCfg
 from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.utils import configclass
 
-ELEVATOR_ASSET_PATH = "/home/ubuntu/ElevatorManAssets/assets/elevator_standalone_bodies.usdc"
+ELEVATOR_ASSET_PATH = "assets/elevator_standalone_bodies.usdc"
 
 @configclass
 class NewElevatorSceneCfg(InteractiveSceneCfg):
