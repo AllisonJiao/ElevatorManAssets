@@ -22,9 +22,10 @@ app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 import isaaclab.sim as sim_utils
-from isaaclab.assets import AssetBaseCfg
+from isaaclab.assets import AssetBaseCfg, ArticulationCfg
 from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.utils import configclass
+from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
 ELEVATOR_ASSET_PATH = "ElevatorManAssets/assets/elevator_standalone_bodies.usdc"
 
@@ -47,6 +48,15 @@ class NewElevatorSceneCfg(InteractiveSceneCfg):
             usd_path=ELEVATOR_ASSET_PATH
         ),
     )
+
+    # robot
+    robot: ArticulationCfg = ArticulationCfg(
+        prim_path="/World/envs/env_.*/Robot",
+        spawn=sim_utils.UsdFileCfg(
+            usd_path=f"{ISAAC_NUCLEUS_DIR}/Robots/Agibot/A2D/A2D.usd"
+        ),
+    )
+
 
 
 def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
