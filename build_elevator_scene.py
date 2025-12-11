@@ -27,6 +27,8 @@ from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
+from agibot import AGIBOT_A2D_CFG
+
 ELEVATOR_ASSET_PATH = "ElevatorManAssets/assets/elevator_standalone_bodies.usdc"
 
 @configclass
@@ -52,9 +54,10 @@ class NewElevatorSceneCfg(InteractiveSceneCfg):
     # robot
     robot: ArticulationCfg = ArticulationCfg(
         prim_path="/World/envs/env_.*/Robot",
-        spawn=sim_utils.UsdFileCfg(
-            usd_path=f"{ISAAC_NUCLEUS_DIR}/Robots/Agibot/A2D/A2D.usd"
-        ),
+        spawn=AGIBOT_A2D_CFG.spawn,
+        init_state=AGIBOT_A2D_CFG.init_state,
+        actuators=AGIBOT_A2D_CFG.actuators,
+        soft_joint_pos_limit_factor=AGIBOT_A2D_CFG.soft_joint_pos_limit_factor,
     )
 
 
