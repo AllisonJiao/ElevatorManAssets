@@ -66,7 +66,7 @@ import torch
 import omni.replicator.core as rep
 
 import isaaclab.sim as sim_utils
-import isaaclab.sim.utils.prims as prim_utils
+from isaaclab.sim.utils import prims as prim_utils
 from isaaclab.markers import VisualizationMarkers
 from isaaclab.markers.config import RAY_CASTER_MARKER_CFG
 from isaaclab.sensors.camera import Camera, CameraCfg
