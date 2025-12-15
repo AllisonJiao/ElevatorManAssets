@@ -21,73 +21,106 @@ args_cli = parser.parse_args()
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
+import torch
+
 import isaaclab.sim as sim_utils
-from isaaclab.assets import AssetBaseCfg, ArticulationCfg
-from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
-from isaaclab.utils import configclass
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
+import isaaclab.utils.prim as prim_utils
+from isaaclab.assets import Articulation
+from isaaclab.sim import SimulationContext
 
 from agibot import AGIBOT_A2D_CFG
 
 ELEVATOR_ASSET_PATH = "ElevatorManAssets/assets/elevator_standalone_bodies.usdc"
 
-@configclass
-class NewElevatorSceneCfg(InteractiveSceneCfg):
+def design_scene() -> tuple[dict, list[list[float]]]:
     """Designs the scene."""
 
     # Ground-plane
-    ground = AssetBaseCfg(prim_path="/World/defaultGroundPlane", spawn=sim_utils.GroundPlaneCfg())
+    cfg = sim_utils.GroundPlaneCfg()
+    cfg.func("/World/defaultGroundPlane", cfg)
 
-    # lights
-    dome_light = AssetBaseCfg(
-        prim_path="/World/Light", spawn=sim_utils.DomeLightCfg(intensity=3000.0, color=(0.75, 0.75, 0.75))
-    )
+    # Light(s)
+    cfg = sim_utils.DomeLightCfg(intensity=3000.0, color=(0.75, 0.75, 0.75))
+    cfg.func("/World/Light", cfg)
 
-    # elevator
-    elevator = AssetBaseCfg(
-        prim_path="/World/Elevator",
-        spawn=sim_utils.UsdFileCfg(
-            usd_path=ELEVATOR_ASSET_PATH
-        ),
-    )
+    # Elevator
+    cfg = sim_utils.UsdFileCfg(usd_path=ELEVATOR_ASSET_PATH)
+    cfg.func("/World/Elevator", cfg)
 
-    # robot
-    robot: ArticulationCfg = ArticulationCfg(
-        prim_path="/World/envs/env_.*/Robot",
-        spawn=AGIBOT_A2D_CFG.spawn,
-        init_state=AGIBOT_A2D_CFG.init_state,
-        actuators=AGIBOT_A2D_CFG.actuators,
-        soft_joint_pos_limit_factor=AGIBOT_A2D_CFG.soft_joint_pos_limit_factor,
-    )
+    # Origin(s)
+    origins = [[0.0, 0.0, 0.0]]
+    # Origin 1
+    prim_utils.create_prim("/World/Origin1", "Xform", translation=origins[0])
 
+    # Robot(s)
+    agibot_cfg = AGIBOT_A2D_CFG.copy()
+    agibot_cfg.prim_path = "/World/Origin.*/Robot"
+    agibot = Articulation(cfg = agibot_cfg)
+
+    scene_entities = {"agibot": agibot}
+    return scene_entities
 
 
-def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
+
+def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articulation], origins: torch.Tensor):
+    robot = entities["agibot"]
+    # Define simulation stepping
     sim_dt = sim.get_physics_dt()
-
+    count = 0
+    # Simulate physics
     while simulation_app.is_running():
+        # reset
+        if count % 500 == 0:
+            # reset counters
+            count = 0
+            # reset the scene entities
+            # root state
+            root_state = robot.data.default_root_state.clone()
+            root_state[:, :3] += origins
+            robot.write_root_pose_to_sim(root_state[:, :7])
+            robot.write_root_velocity_to_sim(root_state[:, 7:])
+            # set joint positions with some noise
+            joint_pos, joint_vel = robot.data.default_joint_pos.clone(), robot.data.default_joint_vel.clone()
+            joint_pos += torch.rand_like(joint_pos) * 0.1
+            robot.write_joint_state_to_sim(joint_pos, joint_vel)
+            # clear internal buffers
+            robot.reset()
+            print("[INFO]: Resetting robot state...")
+        # Apply random action
+        # -- generate random joint efforts
+        efforts = torch.randn_like(robot.data.joint_pos) * 5.0
+        # -- apply action to the robot
+        robot.set_joint_effort_target(efforts)
+        # -- write data to sim
+        robot.write_data_to_sim()
+        # Perform step
         sim.step()
-        scene.update(sim_dt)
+        # Increment counter
+        count += 1
+        # Update buffers
+        robot.update(sim_dt)
 
 
 def main():
     """Main function."""
-    # Initialize the simulation context
+    # Load kit helper
     sim_cfg = sim_utils.SimulationCfg(device=args_cli.device)
-    sim = sim_utils.SimulationContext(sim_cfg)
-
-    sim.set_camera_view([3.5, 0.0, 3.2], [0.0, 0.0, 0.5])
+    sim = SimulationContext(sim_cfg)
+    # Set main camera
+    sim.set_camera_view([2.5, 0.0, 4.0], [0.0, 0.0, 2.0])
     # Design scene
-    scene_cfg = NewElevatorSceneCfg(args_cli.num_envs, env_spacing=0.0)
-    scene = InteractiveScene(scene_cfg)
+    scene_entities, scene_origins = design_scene()
+    scene_origins = torch.tensor(scene_origins, device=sim.device)
     # Play the simulator
     sim.reset()
     # Now we are ready!
     print("[INFO]: Setup complete...")
     # Run the simulator
-    run_simulator(sim, scene)
+    run_simulator(sim, scene_entities, scene_origins)
 
 
 if __name__ == "__main__":
+    # run the main function
     main()
+    # close sim app
     simulation_app.close()
