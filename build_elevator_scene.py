@@ -33,11 +33,16 @@ from agibot import AGIBOT_A2D_CFG
 ELEVATOR_ASSET_PATH = "ElevatorManAssets/assets/elevator_standalone_bodies.usdc"
 
 def axis_angle_to_quat(axis: torch.Tensor, angle: float) -> torch.Tensor:
+    # ensure axis and angle are tensors on the same device and use torch ops
+    device = axis.device
     axis = axis.to(torch.float32)
+    angle_t = torch.tensor(float(angle), device=device, dtype=torch.float32)
     axis = axis / (axis.norm() + 1e-12)
-    w = torch.cos(angle * 0.5)
-    xyz = axis * torch.sin(angle * 0.5)
-    return torch.tensor([w, xyz[0], xyz[1], xyz[2]], device=axis.device)
+    half = angle_t * 0.5
+    w = torch.cos(half)
+    s = torch.sin(half)
+    xyz = axis * s
+    return torch.cat([w.unsqueeze(0), xyz], dim=0)
 
 def design_scene() -> tuple[dict]:
     """Designs the scene."""
@@ -109,7 +114,8 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
                     joint_names.append(str(n))
             
             # collect matching indices and filter to valid range
-            num_dofs = int(robot.num_dofs)
+            # get DOF count from joint_pos tensor (robust API)
+            num_dofs = int(robot.data.joint_pos.numel())
             fixed_idx_list = [i for i, name in enumerate(joint_names) if name in fixed_joint_names]
             fixed_idx_list = [i for i in fixed_idx_list if 0 <= i < num_dofs]
             # create a boolean mask on the correct device for safe assignment
@@ -144,23 +150,29 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
                 joint_pos_target[fixed_mask] = current_pos[fixed_mask]
 
             if use_direct_write:
-                # compute quaternions for each joint
+                # Vectorized quaternion computation (keep tensors on device)
                 device = robot.data.joint_pos.device
                 axes = getattr(robot.data, "joint_axes", None)
                 if axes is None:
-                    axes = torch.tensor([[0.0, 0.0, 1.0]] * robot.num_dofs, device=device)
-                else: 
-                    axes = axes.to(device)
-                
-                quats = torch.zeros((robot.num_dofs, 4), device=device)
-                for i in range(robot.num_dofs):
-                    axis = axes[i]
-                    angle = float(joint_pos_target[i].item())
-                    quats[i] = axis_angle_to_quat(axis, angle)
+                    axes = torch.tensor([[0.0, 0.0, 1.0]] * num_dofs, device=device, dtype=torch.float32)
+                else:
+                    axes = axes.to(device).float()
 
-                # write joint positions directly to the simulator
-                # use current velocities to avoid abrupt velocity changes
-                vel = robot.data.joint_vel.clone()
+                angles = joint_pos_target.to(device).float()           # (N,)
+                axes_norm = axes.norm(dim=1, keepdim=True).clamp_min(1e-12)
+                axes_n = axes / axes_norm                              # (N,3)
+                half = (angles * 0.5).unsqueeze(1)                     # (N,1)
+                w = torch.cos(half)                                    # (N,1)
+                s = torch.sin(half)                                    # (N,1)
+                xyz = axes_n * s                                       # (N,3)
+                quats = torch.cat([w, xyz], dim=1)                     # (N,4)
+
+                # optional debug print once per sweep
+                if (count % max(1, period)) == 0:
+                    print(f"{joint_names[0]} quat: {quats[0].tolist()}")
+
+                # write joint positions directly to the simulator (visual update)
+                vel = robot.data.joint_vel.clone().to(device)
                 robot.write_joint_state_to_sim(joint_pos_target, vel)
             else:
                 # original behavior: let actuators track the position targets
