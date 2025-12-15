@@ -98,8 +98,28 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
             fixed_joint_names = ["joint_lift_body", "joint_body_pitch"]
             
             # resolve indices for the fixed joints (assumes robot.data.joint_names is iterable of strings)
-            joint_names = list(robot.data.joint_names)
-            fixed_idx = [i for i, n in enumerate(joint_names) if n in fixed_joint_names]
+            joint_names_raw = list(robot.data.joint_names)
+            joint_names = []
+
+            for n in joint_names_raw:
+                # some assets expose names as bytes on Python side
+                if isinstance(n, (bytes, bytearray)):
+                    joint_names.append(n.decode("utf-8"))
+                else:
+                    joint_names.append(str(n))
+            
+            # collect matching indices and filter to valid range
+            num_dofs = int(robot.num_dofs)
+            fixed_idx_list = [i for i, name in enumerate(joint_names) if name in fixed_joint_names]
+            fixed_idx_list = [i for i in fixed_idx_list if 0 <= i < num_dofs]
+            # create a boolean mask on the correct device for safe assignment
+            device = robot.data.joint_pos.device
+            if fixed_idx_list:
+                idx_tensor = torch.tensor(fixed_idx_list, dtype=torch.long, device=device)
+                fixed_mask = torch.zeros((num_dofs,), dtype=torch.bool, device=device)
+                fixed_mask[idx_tensor] = True
+            else:
+                fixed_mask = torch.zeros((num_dofs,), dtype=torch.bool, device=device)
 
             # bypass actuators, set to False for physics-driven actuator behavior
             use_direct_write = True
@@ -117,9 +137,11 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
             joint_pos_target = lo + (hi - lo) * frac
 
             # keep fixed joints at the current simulated joint positions so they don't move
-            if fixed_idx:
-                current_pos = robot.data.joint_pos.clone()
-                joint_pos_target[fixed_idx] = current_pos[fixed_idx]
+            if fixed_mask.any():
+                current_pos = robot.data.joint_pos.clone().to(device)
+                # ensure joint_pos_target is writable and on device
+                joint_pos_target = joint_pos_target.to(device).clone()
+                joint_pos_target[fixed_mask] = current_pos[fixed_mask]
 
             if use_direct_write:
                 # compute quaternions for each joint
