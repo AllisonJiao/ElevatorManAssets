@@ -32,18 +32,6 @@ from agibot import AGIBOT_A2D_CFG
 
 ELEVATOR_ASSET_PATH = "ElevatorManAssets/assets/elevator_standalone_bodies.usdc"
 
-def axis_angle_to_quat(axis: torch.Tensor, angle: float) -> torch.Tensor:
-    # ensure axis and angle are tensors on the same device and use torch ops
-    device = axis.device
-    axis = axis.to(torch.float32)
-    angle_t = torch.tensor(float(angle), device=device, dtype=torch.float32)
-    axis = axis / (axis.norm() + 1e-12)
-    half = angle_t * 0.5
-    w = torch.cos(half)
-    s = torch.sin(half)
-    xyz = axis * s
-    return torch.cat([w.unsqueeze(0), xyz], dim=0)
-
 def design_scene() -> tuple[dict]:
     """Designs the scene."""
 
@@ -100,32 +88,21 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
             print("[INFO]: Resetting robot state...")
         # apply random actions to the robot(s)
         for robot in entities.values():
+            num_envs, num_dofs = robot.data.joint_pos.shape
+            device = robot.data.joint_pos.device
+
             fixed_joint_names = ["joint_lift_body", "joint_body_pitch"]
             
             # resolve indices for the fixed joints (assumes robot.data.joint_names is iterable of strings)
             joint_names_raw = list(robot.data.joint_names)
-            joint_names = []
-
-            for n in joint_names_raw:
-                # some assets expose names as bytes on Python side
-                if isinstance(n, (bytes, bytearray)):
-                    joint_names.append(n.decode("utf-8"))
-                else:
-                    joint_names.append(str(n))
+            joint_names = [(n.decode("utf-8") if isinstance(n, (bytes, bytearray)) else str(n)) for n in joint_names_raw]
             
-            # collect matching indices and filter to valid range
-            # get DOF count from joint_pos tensor (robust API)
-            num_dofs = int(robot.data.joint_pos.numel())
             fixed_idx_list = [i for i, name in enumerate(joint_names) if name in fixed_joint_names]
             fixed_idx_list = [i for i in fixed_idx_list if 0 <= i < num_dofs]
-            # create a boolean mask on the correct device for safe assignment
-            device = robot.data.joint_pos.device
+            
+            fixed_mask = torch.zeros((num_dofs,), dtype=torch.bool, device=device)
             if fixed_idx_list:
-                idx_tensor = torch.tensor(fixed_idx_list, dtype=torch.long, device=device)
-                fixed_mask = torch.zeros((num_dofs,), dtype=torch.bool, device=device)
-                fixed_mask[idx_tensor] = True
-            else:
-                fixed_mask = torch.zeros((num_dofs,), dtype=torch.bool, device=device)
+                fixed_mask[torch.tensor(fixed_idx_list, dtype=torch.long, device=device)] = True
 
             # bypass actuators, set to False for physics-driven actuator behavior
             use_direct_write = True
@@ -135,46 +112,26 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
             frac = float(t) / float(max(1, period - 1))  # fraction [0,1]
 
             # read joint limits (shape N x 2: [min, max])
-            device = robot.data.joint_pos.device
             limits = robot.data.soft_joint_pos_limits.to(device)
-            # support shapes like (N,2) or (1,N,2) etc. -> index with ellipsis then flatten
-            lo = limits[..., 0].reshape(-1)
-            hi = limits[..., 1].reshape(-1)
-            # ensure length matches num_dofs
-            lo = lo[:num_dofs]
-            hi = hi[:num_dofs]
-            # linear interpolation from lo -> hi using frac -> result is (num_dofs,)
-            joint_pos_target = (lo + (hi - lo) * float(frac)).to(device).reshape(num_dofs)
+
+            # normalize limits to shape (num_dofs, 2)
+            if limits.dim() == 3:          # e.g. (num_envs, num_dofs, 2)
+                limits_ = limits[0]
+            else:                          # e.g. (num_dofs, 2)
+                limits_ = limits
+
+            lo = limits_[:, 0]             # (num_dofs,)
+            hi = limits_[:, 1]             # (num_dofs,)
+
+            joint_pos_target_1d = lo + (hi - lo) * float(frac)     # (num_dofs,)
+            joint_pos_target = joint_pos_target_1d.unsqueeze(0).repeat(num_envs, 1)  # (num_envs, num_dofs)
             
-            # keep fixed joints at the current simulated joint positions so they don't move
+            # --- keep fixed joints at current positions ---
+            current_pos = robot.data.joint_pos.to(device)          # (num_envs, num_dofs)
             if fixed_mask.any():
-                current_pos = robot.data.joint_pos.clone().to(device)
-                # ensure joint_pos_target is writable and on device
-                joint_pos_target = joint_pos_target.to(device).clone()
-                joint_pos_target[fixed_mask] = current_pos[fixed_mask]
+                joint_pos_target[:, fixed_mask] = current_pos[:, fixed_mask]
 
             if use_direct_write:
-                # Vectorized quaternion computation (keep tensors on device)
-                device = robot.data.joint_pos.device
-                axes = getattr(robot.data, "joint_axes", None)
-                if axes is None:
-                    axes = torch.tensor([[0.0, 0.0, 1.0]] * num_dofs, device=device, dtype=torch.float32)
-                else:
-                    axes = axes.to(device).float()
-
-                angles = joint_pos_target.to(device).float()           # (N,)
-                axes_norm = axes.norm(dim=1, keepdim=True).clamp_min(1e-12)
-                axes_n = axes / axes_norm                              # (N,3)
-                half = (angles * 0.5).unsqueeze(1)                     # (N,1)
-                w = torch.cos(half)                                    # (N,1)
-                s = torch.sin(half)                                    # (N,1)
-                xyz = axes_n * s                                       # (N,3)
-                quats = torch.cat([w, xyz], dim=1)                     # (N,4)
-
-                # optional debug print once per sweep
-                if (count % max(1, period)) == 0:
-                    print(f"{joint_names[0]} quat: {quats[0].tolist()}")
-
                 # write joint positions directly to the simulator (visual update)
                 vel = robot.data.joint_vel.clone().to(device)
                 robot.write_joint_state_to_sim(joint_pos_target, vel)
