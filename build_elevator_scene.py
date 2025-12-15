@@ -32,6 +32,13 @@ from agibot import AGIBOT_A2D_CFG
 
 ELEVATOR_ASSET_PATH = "ElevatorManAssets/assets/elevator_standalone_bodies.usdc"
 
+def axis_angle_to_quat(axis: torch.Tensor, angle: float) -> torch.Tensor:
+    axis = axis.to(torch.float32)
+    axis = axis / (axis.norm() + 1e-12)
+    w = torch.cos(angle * 0.5)
+    xyz = axis * torch.sin(angle * 0.5)
+    return torch.tensor([w, xyz[0], xyz[1], xyz[2]], device=axis.device)
+
 def design_scene() -> tuple[dict]:
     """Designs the scene."""
 
@@ -93,22 +100,51 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
             # resolve indices for the fixed joints (assumes robot.data.joint_names is iterable of strings)
             joint_names = list(robot.data.joint_names)
             fixed_idx = [i for i, n in enumerate(joint_names) if n in fixed_joint_names]
-            
-            # generate random joint positions
-            joint_pos_target = robot.data.default_joint_pos + torch.randn_like(robot.data.joint_pos) * 0.1
-            joint_pos_target = joint_pos_target.clamp_(
-                robot.data.soft_joint_pos_limits[..., 0], robot.data.soft_joint_pos_limits[..., 1]
-            )
-            
+
+            # bypass actuators, set to False for physics-driven actuator behavior
+            use_direct_write = True
+
+            period = 500
+            t = count % period
+            frac = float(t) / float(max(1, period - 1))  # fraction [0,1]
+
+            # read joint limits (shape N x 2: [min, max])
+            limits = robot.data.soft_joint_pos_limits.to(robot.data.joint_pos.device)
+            lo = limits[:, 0]
+            hi = limits[:, 1]
+
+            # linear interpolation from lo -> hi using frac
+            joint_pos_target = lo + (hi - lo) * frac
+
             # keep fixed joints at the current simulated joint positions so they don't move
             if fixed_idx:
                 current_pos = robot.data.joint_pos.clone()
                 joint_pos_target[fixed_idx] = current_pos[fixed_idx]
-            
-            # apply action to the robot
-            robot.set_joint_position_target(joint_pos_target)
-            # write data to sim
-            robot.write_data_to_sim()
+
+            if use_direct_write:
+                # compute quaternions for each joint
+                device = robot.data.joint_pos.device
+                axes = getattr(robot.data, "joint_axes", None)
+                if axes is None:
+                    axes = torch.tensor([[0.0, 0.0, 1.0]] * robot.num_dofs, device=device)
+                else: 
+                    axes = axes.to(device)
+                
+                quats = torch.zeros((robot.num_dofs, 4), device=device)
+                for i in range(robot.num_dofs):
+                    axis = axes[i]
+                    angle = float(joint_pos_target[i].item())
+                    quats[i] = axis_angle_to_quat(axis, angle)
+
+                # write joint positions directly to the simulator
+                # use current velocities to avoid abrupt velocity changes
+                vel = robot.data.joint_vel.clone()
+                robot.write_joint_state_to_sim(joint_pos_target, vel)
+            else:
+                # original behavior: let actuators track the position targets
+                robot.set_joint_position_target(joint_pos_target)
+                robot.write_data_to_sim()
+
         # Perform step
         sim.step()
         # Increment counter
