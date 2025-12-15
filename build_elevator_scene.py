@@ -135,13 +135,17 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
             frac = float(t) / float(max(1, period - 1))  # fraction [0,1]
 
             # read joint limits (shape N x 2: [min, max])
-            limits = robot.data.soft_joint_pos_limits.to(robot.data.joint_pos.device)
-            lo = limits[:, 0]
-            hi = limits[:, 1]
-
-            # linear interpolation from lo -> hi using frac
-            joint_pos_target = lo + (hi - lo) * frac
-
+            device = robot.data.joint_pos.device
+            limits = robot.data.soft_joint_pos_limits.to(device)
+            # support shapes like (N,2) or (1,N,2) etc. -> index with ellipsis then flatten
+            lo = limits[..., 0].reshape(-1)
+            hi = limits[..., 1].reshape(-1)
+            # ensure length matches num_dofs
+            lo = lo[:num_dofs]
+            hi = hi[:num_dofs]
+            # linear interpolation from lo -> hi using frac -> result is (num_dofs,)
+            joint_pos_target = (lo + (hi - lo) * float(frac)).to(device).reshape(num_dofs)
+            
             # keep fixed joints at the current simulated joint positions so they don't move
             if fixed_mask.any():
                 current_pos = robot.data.joint_pos.clone().to(device)
