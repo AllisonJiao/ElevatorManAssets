@@ -73,31 +73,37 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
             # reset counters
             count = 0
             # reset the scene entities
-            # root state
-            root_state = robot.data.default_root_state.clone()
-            # root_state[:, :3] += origins
-            robot.write_root_pose_to_sim(root_state[:, :7])
-            robot.write_root_velocity_to_sim(root_state[:, 7:])
-            # set joint positions with some noise
-            joint_pos, joint_vel = robot.data.default_joint_pos.clone(), robot.data.default_joint_vel.clone()
-            joint_pos += torch.rand_like(joint_pos) * 0.1
-            robot.write_joint_state_to_sim(joint_pos, joint_vel)
-            # clear internal buffers
-            robot.reset()
+            for index, robot in enumerate(entities.values()):
+                # root state
+                root_state = robot.data.default_root_state.clone()
+                # root_state[:, :3] += origins[index]
+                robot.write_root_pose_to_sim(root_state[:, :7])
+                robot.write_root_velocity_to_sim(root_state[:, 7:])
+                # set joint positions with some noise
+                joint_pos, joint_vel = robot.data.default_joint_pos.clone(), robot.data.default_joint_vel.clone()
+                joint_pos += torch.rand_like(joint_pos) * 0.1
+                robot.write_joint_state_to_sim(joint_pos, joint_vel)
+                # clear internal buffers
+                robot.reset()
             print("[INFO]: Resetting robot state...")
-        # Apply random action
-        # -- generate random joint efforts
-        efforts = torch.randn_like(robot.data.joint_pos) * 5.0
-        # -- apply action to the robot
-        robot.set_joint_effort_target(efforts)
-        # -- write data to sim
-        robot.write_data_to_sim()
+        # apply random actions to the robots
+        for robot in entities.values():
+            # generate random joint positions
+            joint_pos_target = robot.data.default_joint_pos + torch.randn_like(robot.data.joint_pos) * 0.1
+            joint_pos_target = joint_pos_target.clamp_(
+                robot.data.soft_joint_pos_limits[..., 0], robot.data.soft_joint_pos_limits[..., 1]
+            )
+            # apply action to the robot
+            robot.set_joint_position_target(joint_pos_target)
+            # write data to sim
+            robot.write_data_to_sim()
         # Perform step
         sim.step()
         # Increment counter
         count += 1
-        # Update buffers
-        robot.update(sim_dt)
+        # update buffers
+        for robot in entities.values():
+            robot.update(sim_dt)
 
 
 def main():
