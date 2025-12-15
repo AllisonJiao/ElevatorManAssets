@@ -86,13 +86,25 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
                 # clear internal buffers
                 robot.reset()
             print("[INFO]: Resetting robot state...")
-        # apply random actions to the robots
+        # apply random actions to the robot(s)
         for robot in entities.values():
+            fixed_joint_names = ["joint_lift_body", "joint_body_pitch"]
+            
+            # resolve indices for the fixed joints (assumes robot.data.joint_names is iterable of strings)
+            joint_names = list(robot.data.joint_names)
+            fixed_idx = [i for i, n in enumerate(joint_names) if n in fixed_joint_names]
+            
             # generate random joint positions
             joint_pos_target = robot.data.default_joint_pos + torch.randn_like(robot.data.joint_pos) * 0.1
             joint_pos_target = joint_pos_target.clamp_(
                 robot.data.soft_joint_pos_limits[..., 0], robot.data.soft_joint_pos_limits[..., 1]
             )
+            
+            # keep fixed joints at the current simulated joint positions so they don't move
+            if fixed_idx:
+                current_pos = robot.data.joint_pos.clone()
+                joint_pos_target[fixed_idx] = current_pos[fixed_idx]
+            
             # apply action to the robot
             robot.set_joint_position_target(joint_pos_target)
             # write data to sim
