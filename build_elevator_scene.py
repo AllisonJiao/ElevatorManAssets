@@ -24,7 +24,7 @@ simulation_app = app_launcher.app
 import torch
 
 import isaaclab.sim as sim_utils
-import prims as prim_utils
+# import prims as prim_utils
 from isaaclab.assets import Articulation
 from isaaclab.sim import SimulationContext
 
@@ -32,7 +32,7 @@ from agibot import AGIBOT_A2D_CFG
 
 ELEVATOR_ASSET_PATH = "ElevatorManAssets/assets/elevator_standalone_bodies.usdc"
 
-def design_scene() -> tuple[dict, list[list[float]]]:
+def design_scene() -> tuple[dict]:
     """Designs the scene."""
 
     # Ground-plane
@@ -48,21 +48,20 @@ def design_scene() -> tuple[dict, list[list[float]]]:
     cfg.func("/World/Elevator", cfg)
 
     # Origin(s)
-    origins = [[0.0, 0.0, 0.0]]
+    # origins = [[0.0, 0.0, 0.0]]
     # Origin 1
-    prim_utils.create_prim("/World/Origin1", "Xform", translation=origins[0])
+    # prim_utils.create_prim("/World/Origin1", "Xform", translation=origins[0])
 
     # Robot(s)
     agibot_cfg = AGIBOT_A2D_CFG.copy()
-    agibot_cfg.prim_path = "/World/Origin.*/Robot"
+    agibot_cfg.prim_path = "/World/Robot"
     agibot = Articulation(cfg = agibot_cfg)
 
     scene_entities = {"agibot": agibot}
     return scene_entities
 
 
-
-def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articulation], origins: torch.Tensor):
+def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articulation]):
     robot = entities["agibot"]
     # Define simulation stepping
     sim_dt = sim.get_physics_dt()
@@ -76,7 +75,7 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
             # reset the scene entities
             # root state
             root_state = robot.data.default_root_state.clone()
-            root_state[:, :3] += origins
+            # root_state[:, :3] += origins
             robot.write_root_pose_to_sim(root_state[:, :7])
             robot.write_root_velocity_to_sim(root_state[:, 7:])
             # set joint positions with some noise
@@ -109,14 +108,14 @@ def main():
     # Set main camera
     sim.set_camera_view([2.5, 0.0, 4.0], [0.0, 0.0, 2.0])
     # Design scene
-    scene_entities, scene_origins = design_scene()
-    scene_origins = torch.tensor(scene_origins, device=sim.device)
+    scene_entities = design_scene()
+    # scene_origins = torch.tensor(scene_origins, device=sim.device)
     # Play the simulator
     sim.reset()
     # Now we are ready!
     print("[INFO]: Setup complete...")
     # Run the simulator
-    run_simulator(sim, scene_entities, scene_origins)
+    run_simulator(sim, scene_entities)
 
 
 if __name__ == "__main__":
