@@ -31,8 +31,6 @@ from isaaclab.sim import SimulationContext
 from agibot import AGIBOT_A2D_CFG
 from elevator import ELEVATOR_CFG
 
-ELEVATOR_ASSET_PATH = "ElevatorManAssets/assets/elevator_rigged.usdc"
-
 def design_scene() -> tuple[dict]:
     """Designs the scene."""
 
