@@ -63,6 +63,15 @@ def design_scene() -> tuple[dict]:
 
 def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articulation]):
     robot = entities["agibot"]
+
+    animate_joint_names = [
+        "left_arm",
+        "right_arm",
+    ]
+
+    animate_ids, _ = robot.find_joints(animate_joint_names)   # returns (ids, names)
+    animate_ids = torch.as_tensor(animate_ids, device=robot.device, dtype=torch.long)
+
     # Define simulation stepping
     sim_dt = sim.get_physics_dt()
     count = 0
@@ -92,7 +101,10 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
         # apply random actions to the robots
         for robot in entities.values():
             # generate random joint positions
-            joint_pos_target = robot.data.default_joint_pos + alpha * (2.0 * torch.pi)
+            joint_pos_target = robot.data.default_joint_pos.clone()
+            # Only animate chosen joints: current + 2*pi (scaled by alpha)
+            joint_pos_target[:, animate_ids] += alpha * (2.0 * torch.pi)
+            
             joint_pos_target = joint_pos_target.clamp_(
                 robot.data.soft_joint_pos_limits[..., 0], robot.data.soft_joint_pos_limits[..., 1]
             )
