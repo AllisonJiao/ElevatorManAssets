@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Configuration for the Agibot A2D humanoid robots.
+"""Configuration for the Elevator.
 
 The following configurations are available:
 
@@ -22,7 +22,7 @@ ELEVATOR_ASSET_PATH = "ElevatorManAssets/assets/elevator_rigged.usdc"
 # Configuration
 ##
 
-AGIBOT_A2D_CFG = ArticulationCfg(
+ELEVATOR_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(
         usd_path=f"{ELEVATOR_ASSET_PATH}",
         activate_contact_sensors=True,
