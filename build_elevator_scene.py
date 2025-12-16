@@ -65,8 +65,8 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
     robot = entities["agibot"]
 
     animate_joint_names = [
-        "left_arm",
-        "right_arm",
+        n for n in robot.data.joint_names
+        if n.startswith("left_arm_joint") or n.startswith("right_arm_joint")
     ]
 
     animate_ids, _ = robot.find_joints(animate_joint_names)   # returns (ids, names)
@@ -104,7 +104,7 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
             joint_pos_target = robot.data.default_joint_pos.clone()
             # Only animate chosen joints: current + 2*pi (scaled by alpha)
             joint_pos_target[:, animate_ids] += alpha * (2.0 * torch.pi)
-            
+
             joint_pos_target = joint_pos_target.clamp_(
                 robot.data.soft_joint_pos_limits[..., 0], robot.data.soft_joint_pos_limits[..., 1]
             )
