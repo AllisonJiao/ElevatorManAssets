@@ -45,13 +45,9 @@ def design_scene() -> tuple[dict]:
     cfg.func("/World/Light", cfg)
 
     # Elevator
-    # elevator_cfg = ELEVATOR_CFG.copy()
-    # elevator_cfg.prim_path = "/World/Elevator"
-    # elevator = Articulation(cfg = elevator_cfg)
-    
-    # Elevator
-    cfg = sim_utils.UsdFileCfg(usd_path=ELEVATOR_ASSET_PATH)
-    cfg.func("/World/Elevator", cfg)
+    elevator_cfg = ELEVATOR_CFG.copy()
+    elevator_cfg.prim_path = "/World/Elevator"
+    elevator = Articulation(cfg = elevator_cfg)
 
     # Origin(s)
     # origins = [[0.0, 0.0, 0.0]]
