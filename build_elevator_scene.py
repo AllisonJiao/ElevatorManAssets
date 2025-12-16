@@ -86,54 +86,20 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
                 # clear internal buffers
                 robot.reset()
             print("[INFO]: Resetting robot state...")
-        # apply random actions to the robot(s)
+        period = 500
+        t = count % period
+        alpha = t / max(1, period - 1)
+        # apply random actions to the robots
         for robot in entities.values():
-            num_envs, num_dofs = robot.data.joint_pos.shape
-            device = robot.data.joint_pos.device
-
-            # fixed_joint_names = ["joint_lift_body", "joint_body_pitch"]
-            
-            # resolve indices for the fixed joints (assumes robot.data.joint_names is iterable of strings)
-            joint_names_raw = list(robot.data.joint_names)
-            joint_names = [(n.decode("utf-8") if isinstance(n, (bytes, bytearray)) else str(n)) for n in joint_names_raw]
-            
-            # fixed_idx_list = [i for i, name in enumerate(joint_names) if name in fixed_joint_names]
-            # fixed_idx_list = [i for i in fixed_idx_list if 0 <= i < num_dofs]
-            
-            # fixed_mask = torch.zeros((num_dofs,), dtype=torch.bool, device=device)
-            # if fixed_idx_list:
-            #     fixed_mask[torch.tensor(fixed_idx_list, dtype=torch.long, device=device)] = True
-
-            period = 500
-            t = count % period
-            frac = float(t) / float(max(1, period - 1))  # fraction [0,1]
-
-            # read joint limits (shape N x 2: [min, max])
-            limits = robot.data.soft_joint_pos_limits.to(device)
-
-            # normalize limits to shape (num_dofs, 2)
-            if limits.dim() == 3:          # e.g. (num_envs, num_dofs, 2)
-                limits_ = limits[0]
-            else:                          # e.g. (num_dofs, 2)
-                limits_ = limits
-
-            lo = limits_[:, 0]             # (num_dofs,)
-            hi = limits_[:, 1]             # (num_dofs,)
-
-            joint_pos_target_1d = lo + (hi - lo) * float(frac)     # (num_dofs,)
-            joint_pos_target = joint_pos_target_1d.unsqueeze(0).repeat(num_envs, 1)  # (num_envs, num_dofs)
-            
-            # --- keep fixed joints at current positions ---
-            # current_pos = robot.data.joint_pos.to(device)          # (num_envs, num_dofs)
-            # if fixed_mask.any():
-            #     joint_pos_target[:, fixed_mask] = current_pos[:, fixed_mask]
-            
+            # generate random joint positions
+            joint_pos_target = robot.data.default_joint_pos + alpha * (2.0 * torch.pi)
+            joint_pos_target = joint_pos_target.clamp_(
+                robot.data.soft_joint_pos_limits[..., 0], robot.data.soft_joint_pos_limits[..., 1]
+            )
+            # apply action to the robot
             robot.set_joint_position_target(joint_pos_target)
+            # write data to sim
             robot.write_data_to_sim()
-
-            if count % 60 == 0:
-                print("root pos:", robot.data.root_pos_w[0].cpu().numpy())
-
         # Perform step
         sim.step()
         # Increment counter
