@@ -102,8 +102,8 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
         for robot in entities.values():
             # generate random joint positions
             joint_pos_target = robot.data.default_joint_pos.clone()
-            # Only animate chosen joints: current + 2*pi (scaled by alpha)
-            joint_pos_target[:, animate_ids] += alpha * (2.0 * torch.pi)
+            # Only animate chosen joints: current + pi (scaled by alpha)
+            joint_pos_target[:, animate_ids] += alpha * torch.pi
 
             joint_pos_target = joint_pos_target.clamp_(
                 robot.data.soft_joint_pos_limits[..., 0], robot.data.soft_joint_pos_limits[..., 1]
