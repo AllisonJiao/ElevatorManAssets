@@ -31,6 +31,8 @@ from isaaclab.sim import SimulationContext
 from agibot import AGIBOT_A2D_CFG
 from elevator import ELEVATOR_CFG
 
+ELEVATOR_ASSET_PATH = "ElevatorManAssets/assets/elevator_rigged.usdc"
+
 def design_scene() -> tuple[dict]:
     """Designs the scene."""
 
@@ -43,9 +45,13 @@ def design_scene() -> tuple[dict]:
     cfg.func("/World/Light", cfg)
 
     # Elevator
-    elevator_cfg = ELEVATOR_CFG.copy()
-    elevator_cfg.prim_path = "/World/Elevator"
-    elevator = Articulation(cfg = elevator_cfg)
+    # elevator_cfg = ELEVATOR_CFG.copy()
+    # elevator_cfg.prim_path = "/World/Elevator"
+    # elevator = Articulation(cfg = elevator_cfg)
+    
+    # Elevator
+    cfg = sim_utils.UsdFileCfg(usd_path=ELEVATOR_ASSET_PATH)
+    cfg.func("/World/Elevator", cfg)
 
     # Origin(s)
     # origins = [[0.0, 0.0, 0.0]]
