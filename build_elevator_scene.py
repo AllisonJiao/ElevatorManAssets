@@ -91,18 +91,18 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
             num_envs, num_dofs = robot.data.joint_pos.shape
             device = robot.data.joint_pos.device
 
-            fixed_joint_names = ["joint_lift_body", "joint_body_pitch"]
+            # fixed_joint_names = ["joint_lift_body", "joint_body_pitch"]
             
             # resolve indices for the fixed joints (assumes robot.data.joint_names is iterable of strings)
             joint_names_raw = list(robot.data.joint_names)
             joint_names = [(n.decode("utf-8") if isinstance(n, (bytes, bytearray)) else str(n)) for n in joint_names_raw]
             
-            fixed_idx_list = [i for i, name in enumerate(joint_names) if name in fixed_joint_names]
-            fixed_idx_list = [i for i in fixed_idx_list if 0 <= i < num_dofs]
+            # fixed_idx_list = [i for i, name in enumerate(joint_names) if name in fixed_joint_names]
+            # fixed_idx_list = [i for i in fixed_idx_list if 0 <= i < num_dofs]
             
-            fixed_mask = torch.zeros((num_dofs,), dtype=torch.bool, device=device)
-            if fixed_idx_list:
-                fixed_mask[torch.tensor(fixed_idx_list, dtype=torch.long, device=device)] = True
+            # fixed_mask = torch.zeros((num_dofs,), dtype=torch.bool, device=device)
+            # if fixed_idx_list:
+            #     fixed_mask[torch.tensor(fixed_idx_list, dtype=torch.long, device=device)] = True
 
             period = 500
             t = count % period
@@ -124,9 +124,9 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
             joint_pos_target = joint_pos_target_1d.unsqueeze(0).repeat(num_envs, 1)  # (num_envs, num_dofs)
             
             # --- keep fixed joints at current positions ---
-            current_pos = robot.data.joint_pos.to(device)          # (num_envs, num_dofs)
-            if fixed_mask.any():
-                joint_pos_target[:, fixed_mask] = current_pos[:, fixed_mask]
+            # current_pos = robot.data.joint_pos.to(device)          # (num_envs, num_dofs)
+            # if fixed_mask.any():
+            #     joint_pos_target[:, fixed_mask] = current_pos[:, fixed_mask]
             
             robot.set_joint_position_target(joint_pos_target)
             robot.write_data_to_sim()
