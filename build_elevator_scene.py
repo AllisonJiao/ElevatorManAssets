@@ -104,9 +104,6 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
             if fixed_idx_list:
                 fixed_mask[torch.tensor(fixed_idx_list, dtype=torch.long, device=device)] = True
 
-            # bypass actuators, set to False for physics-driven actuator behavior
-            use_direct_write = True
-
             period = 500
             t = count % period
             frac = float(t) / float(max(1, period - 1))  # fraction [0,1]
@@ -130,15 +127,12 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
             current_pos = robot.data.joint_pos.to(device)          # (num_envs, num_dofs)
             if fixed_mask.any():
                 joint_pos_target[:, fixed_mask] = current_pos[:, fixed_mask]
+            
+            robot.set_joint_position_target(joint_pos_target)
+            robot.write_data_to_sim()
 
-            if use_direct_write:
-                # write joint positions directly to the simulator (visual update)
-                vel = robot.data.joint_vel.clone().to(device)
-                robot.write_joint_state_to_sim(joint_pos_target, vel)
-            else:
-                # original behavior: let actuators track the position targets
-                robot.set_joint_position_target(joint_pos_target)
-                robot.write_data_to_sim()
+            if count % 60 == 0:
+                print("root pos:", robot.data.root_pos_w[0].cpu().numpy())
 
         # Perform step
         sim.step()
