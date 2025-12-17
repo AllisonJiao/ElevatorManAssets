@@ -28,8 +28,8 @@ import isaaclab.sim as sim_utils
 from isaaclab.assets import Articulation
 from isaaclab.sim import SimulationContext
 
-from agibot import AGIBOT_A2D_CFG
-from elevator import ELEVATOR_CFG
+from cfg.agibot import AGIBOT_A2D_CFG
+from cfg.elevator import ELEVATOR_CFG
 
 def design_scene() -> tuple[dict]:
     """Designs the scene."""

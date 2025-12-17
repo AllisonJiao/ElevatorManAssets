@@ -11,7 +11,7 @@ simulation_app = app_launcher.app
 import isaaclab.sim as sim_utils
 from isaaclab.sim import SimulationContext
 
-ELEVATOR_ASSET_PATH = "ElevatorManAssets/assets/elevator_rigged.usdc"
+ELEVATOR_ASSET_PATH = "assets/Collected_elevator_asset/elevator_asset.usdc"
 ROBOT_ASSET_PATH = None  # optional: if you want to reference robot USD directly too
 
 def design_scene():
