@@ -1,0 +1,11 @@
+{
+    "version": "1.0",
+    "file_records": [
+        {
+            "source_url": "/isaaclab/ElevatorManAssets/assets/textures/color_191191191.hdr",
+            "source_hash": "ff5467c86bf3f65aa335d37160ffac63f6b66177",
+            "target_url": "./textures/color_191191191.hdr",
+            "target_hash": "b07afafe49535bd214fbb998350013519bcc3118"
+        }
+    ]
+}
