@@ -62,64 +62,54 @@ def design_scene() -> tuple[dict]:
 
 
 def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articulation]):
-    robot = entities["agibot"]
+    agibot = entities["agibot"]
+    elevator = entities["elevator"]
 
     animate_joint_names = [
-        n for n in robot.data.joint_names
+        n for n in agibot.data.joint_names
         if n.startswith("left_arm_joint") or n.startswith("right_arm_joint")
     ]
+    animate_ids, _ = agibot.find_joints(animate_joint_names)
+    animate_ids = torch.as_tensor(animate_ids, device=agibot.device, dtype=torch.long)
 
-    animate_ids, _ = robot.find_joints(animate_joint_names)   # returns (ids, names)
-    animate_ids = torch.as_tensor(animate_ids, device=robot.device, dtype=torch.long)
-
-    # Define simulation stepping
     sim_dt = sim.get_physics_dt()
     count = 0
-    # Simulate physics
+    period = 500
+
     while simulation_app.is_running():
-        # reset
-        if count % 500 == 0:
-            # reset counters
+        if count % period == 0:
             count = 0
-            # reset the scene entities
-            for index, robot in enumerate(entities.values()):
-                # root state
-                root_state = robot.data.default_root_state.clone()
-                # root_state[:, :3] += origins[index]
-                robot.write_root_pose_to_sim(root_state[:, :7])
-                robot.write_root_velocity_to_sim(root_state[:, 7:])
-                # set joint positions with some noise
-                joint_pos, joint_vel = robot.data.default_joint_pos.clone(), robot.data.default_joint_vel.clone()
+            for a in [agibot, elevator]:
+                root_state = a.data.default_root_state.clone()
+                a.write_root_pose_to_sim(root_state[:, :7])
+                a.write_root_velocity_to_sim(root_state[:, 7:])
+
+                joint_pos = a.data.default_joint_pos.clone()
+                joint_vel = a.data.default_joint_vel.clone()
                 joint_pos += torch.rand_like(joint_pos) * 0.1
-                robot.write_joint_state_to_sim(joint_pos, joint_vel)
-                # clear internal buffers
-                robot.reset()
-            print("[INFO]: Resetting robot state...")
-        period = 500
-        t = count % period
-        alpha = t / max(1, period - 1)
-        # apply random actions to the robots
-        for robot in entities.values():
-            # generate random joint positions
-            joint_pos_target = robot.data.default_joint_pos.clone()
-            # Only animate chosen joints: current + 2 * pi (scaled by alpha)
-            joint_pos_target[:, animate_ids] += alpha * (2 * torch.pi)
+                a.write_joint_state_to_sim(joint_pos, joint_vel)
+                a.reset()
+            print("[INFO]: Resetting state...")
 
-            joint_pos_target = joint_pos_target.clamp_(
-                robot.data.soft_joint_pos_limits[..., 0], robot.data.soft_joint_pos_limits[..., 1]
-            )
-            # apply action to the robot
-            robot.set_joint_position_target(joint_pos_target)
-            # write data to sim
-            robot.write_data_to_sim()
-        # Perform step
+        alpha = (count % period) / max(1, period - 1)
+
+        # control agibot ONLY
+        joint_pos_target = agibot.data.default_joint_pos.clone()
+        joint_pos_target[:, animate_ids] += alpha * (2 * torch.pi)
+        joint_pos_target = joint_pos_target.clamp_(
+            agibot.data.soft_joint_pos_limits[..., 0], agibot.data.soft_joint_pos_limits[..., 1]
+        )
+        agibot.set_joint_position_target(joint_pos_target)
+
+        # write to sim
+        agibot.write_data_to_sim()
+        elevator.write_data_to_sim()  # no control yet
+
         sim.step()
-        # Increment counter
         count += 1
-        # update buffers
-        for robot in entities.values():
-            robot.update(sim_dt)
 
+        agibot.update(sim_dt)
+        elevator.update(sim_dt)
 
 def main():
     """Main function."""
