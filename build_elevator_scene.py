@@ -44,7 +44,7 @@ def design_scene() -> tuple[dict]:
 
     # Elevator
     elevator_cfg = ELEVATOR_CFG.copy()
-    elevator_cfg.prim_path = "/World/Elevator"
+    elevator_cfg.prim_path = "/World/Elevator/Elevator"
     elevator = Articulation(cfg = elevator_cfg)
 
     # Origin(s)
