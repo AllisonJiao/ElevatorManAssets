@@ -31,9 +31,6 @@ from isaaclab.sim import SimulationContext
 from agibot import AGIBOT_A2D_CFG
 from elevator import ELEVATOR_CFG
 
-from pxr import Usd, UsdPhysics
-import carb
-
 def design_scene() -> tuple[dict]:
     """Designs the scene."""
 
@@ -47,21 +44,7 @@ def design_scene() -> tuple[dict]:
 
     # Elevator
     elevator_cfg = ELEVATOR_CFG.copy()
-
-    usd_path = elevator_cfg.spawn.usd_path  # this is what your script actually loads
-    stage_asset = Usd.Stage.Open(usd_path)
-
-    carb.log_warn(f"[USD CHECK] usd_path = {usd_path}")
-    carb.log_warn(f"[USD CHECK] defaultPrim = {stage_asset.GetDefaultPrim().GetPath()}")
-
-    art_roots = []
-    for prim in stage_asset.Traverse():
-        if prim.HasAPI(UsdPhysics.ArticulationRootAPI):
-            art_roots.append(prim.GetPath().pathString)
-
-    carb.log_warn(f"[USD CHECK] ArticulationRootAPI prims = {art_roots}")
-
-    elevator_cfg.prim_path = "/World/Elevator/Elevator"
+    elevator_cfg.prim_path = "/World/Elevator"
     elevator = Articulation(cfg = elevator_cfg)
 
     # Origin(s)
