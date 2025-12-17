@@ -31,7 +31,7 @@ from isaaclab.sim import SimulationContext
 from agibot import AGIBOT_A2D_CFG
 from elevator import ELEVATOR_CFG
 
-from pxr import UsdPhysics
+from pxr import Usd, UsdPhysics
 import carb
 
 def design_scene() -> tuple[dict]:
