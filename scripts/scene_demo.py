@@ -26,7 +26,7 @@ from isaaclab.assets import AssetBaseCfg
 from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.utils import configclass
 
-SCENE_ASSET_PATH = "../assets/scene_demo.usdc"
+SCENE_ASSET_PATH = "ElevatorManAssets/assets/scene_demo.usdc"
 
 @configclass
 class NewElevatorSceneCfg(InteractiveSceneCfg):
