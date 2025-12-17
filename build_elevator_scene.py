@@ -31,6 +31,9 @@ from isaaclab.sim import SimulationContext
 from agibot import AGIBOT_A2D_CFG
 from elevator import ELEVATOR_CFG
 
+from pxr import UsdPhysics
+import omni.usd
+
 def design_scene() -> tuple[dict]:
     """Designs the scene."""
 
@@ -131,6 +134,10 @@ def main():
     # Design scene
     scene_entities = design_scene()
     # scene_origins = torch.tensor(scene_origins, device=sim.device)
+    stage = omni.usd.get_context().get_stage()
+    prim = stage.GetPrimAtPath("/World/Elevator")
+    print("ELEVATOR VALID:", prim.IsValid())
+    print("HAS ART ROOT:", prim.HasAPI(UsdPhysics.ArticulationRootAPI))
     # Play the simulator
     sim.reset()
     # Now we are ready!
