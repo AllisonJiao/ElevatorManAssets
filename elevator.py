@@ -38,14 +38,14 @@ ELEVATOR_CFG = ArticulationCfg(
     ),
     init_state=ArticulationCfg.InitialStateCfg(
         joint_pos={
-            "button_0_0_joint": 0.0,
-            "button_0_1_joint": 0.0,
-            "button_1_0_joint": 0.0,
-            "button_1_1_joint": 0.0,
-            "button_2_0_joint": 0.0,
-            "button_2_1_joint": 0.0,
-            "button_3_0_joint": 0.0,
-            "button_3_1_joint": 0.0,
+            # "button_0_0_joint": 0.0,
+            # "button_0_1_joint": 0.0,
+            # "button_1_0_joint": 0.0,
+            # "button_1_1_joint": 0.0,
+            # "button_2_0_joint": 0.0,
+            # "button_2_1_joint": 0.0,
+            # "button_3_0_joint": 0.0,
+            # "button_3_1_joint": 0.0,
             "door1_joint": 0.0,
             "door2_joint": 0.0,
         },
@@ -53,13 +53,13 @@ ELEVATOR_CFG = ArticulationCfg(
     ),
     actuators={
         # Elevator buttons
-        "elevator_buttons": ImplicitActuatorCfg(
-            joint_names_expr=["button_[0-3]_[0-1]_joint"],
-            effort_limit_sim=10.0,
-            velocity_limit_sim=1.0,
-            stiffness=1000.0,
-            damping=10.0,
-        ),
+        # "elevator_buttons": ImplicitActuatorCfg(
+        #     joint_names_expr=["button_[0-3]_[0-1]_joint"],
+        #     effort_limit_sim=10.0,
+        #     velocity_limit_sim=1.0,
+        #     stiffness=1000.0,
+        #     damping=10.0,
+        # ),
         # Elevator doors
         "elevator_doors": ImplicitActuatorCfg(
             joint_names_expr=["door[1-2]_joint"],
