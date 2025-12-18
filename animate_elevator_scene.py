@@ -167,6 +167,8 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
             right_ik.reset()
             right_ik.set_command(right_cmd)
 
+            print("[INFO]: Resetting state...")
+
         phase = count % period
         if phase < 100:        # opening
             t = phase / 99.0
