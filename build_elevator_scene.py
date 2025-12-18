@@ -72,7 +72,7 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
     animate_agibot_ids, _ = agibot.find_joints(animate_agibot_joint_names)
     animate_agibot_ids = torch.as_tensor(animate_agibot_ids, device=agibot.device, dtype=torch.long)
 
-    animate_elevator_joint_names = [ "door1_joint", "door2_joint" ]
+    animate_elevator_joint_names = [ "door2_joint" ]
     animate_elevator_ids, _ = elevator.find_joints(animate_elevator_joint_names)
     animate_elevator_ids = torch.as_tensor(animate_elevator_ids, device=elevator.device, dtype=torch.long)
 
@@ -97,7 +97,7 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
 
         alpha = (count % period) / max(1, period - 1)
 
-        open_pos = 0.05
+        open_pos = -0.9
         close_pos = 0.0
 
         phase = count % period
