@@ -75,7 +75,8 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     device = robot.device
 
     elevator = scene["elevator"]
-    print("[INFO] elevator joints:", elevator.data.joint_names)
+    door2_ids, _ = elevator.find_joints(["door2_joint"])
+    door2_ids = torch.tensor(door2_ids, device=elevator.device, dtype=torch.long)
 
 
     # ---------------- IK controllers ----------------
@@ -141,6 +142,9 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     count = 0
     goal_idx = 0
 
+    open_delta = -0.5  # 50 cm along chosen axis
+    close_delta = 0.0
+
     # ---------------- Loop ----------------
     while simulation_app.is_running():
 
@@ -162,6 +166,21 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
             right_ik.reset()
             right_ik.set_command(right_cmd)
+
+        phase = count % period
+        if phase < 100:        # opening
+            t = phase / 99.0
+            delta = close_delta + t * (open_delta - close_delta)
+        elif phase < 400:      # hold open
+            delta = open_delta
+        else:                  # closing
+            t = (phase - 400) / 99.0
+            delta = open_delta + t * (close_delta - open_delta)
+        
+        # delta: 0.0 -> open_delta (negative), in meters (prismatic joint)
+        door2_q_des = torch.full((scene.num_envs, len(door2_ids)), delta, device=elevator.device)
+
+        elevator.set_joint_position_target(door2_q_des, joint_ids=door2_ids)
 
         # ---------------- Left arm IK ----------------
         root_w = robot.data.root_pose_w
