@@ -31,6 +31,10 @@ from isaaclab.sim import SimulationContext
 from cfg.agibot import AGIBOT_A2D_CFG
 from cfg.elevator import ELEVATOR_CFG
 
+# NEW: USD access
+import omni.usd
+from pxr import UsdGeom, Gf
+
 def design_scene() -> tuple[dict]:
     """Designs the scene."""
 
@@ -72,20 +76,30 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
     animate_agibot_ids, _ = agibot.find_joints(animate_agibot_joint_names)
     animate_agibot_ids = torch.as_tensor(animate_agibot_ids, device=agibot.device, dtype=torch.long)
 
-    animate_elevator_joint_names = [ "door2_joint" ]
-    animate_elevator_ids, _ = elevator.find_joints(animate_elevator_joint_names)
-    animate_elevator_ids = torch.as_tensor(animate_elevator_ids, device=elevator.device, dtype=torch.long)
+    # animate_elevator_joint_names = [ "door2_joint" ]
+    # animate_elevator_ids, _ = elevator.find_joints(animate_elevator_joint_names)
+    # animate_elevator_ids = torch.as_tensor(animate_elevator_ids, device=elevator.device, dtype=torch.long)
+    # --- NEW: Door2 prim transform animation (mesh-only) ---
+    # Use the path you see in Stage. From your screenshot it looks like:
+    DOOR2_PRIM_PATH = "/World/Elevator/root/Elevator/ElevatorRig/Door2"
+    stage = omni.usd.get_context().get_stage()
+    door2_prim = stage.GetPrimAtPath(DOOR2_PRIM_PATH)
+    if not door2_prim.IsValid():
+        raise RuntimeError(f"Door2 prim not found at: {DOOR2_PRIM_PATH}")
 
-    print("Elevator joints:", elevator.data.joint_names)
-    print("door2 id:", animate_elevator_ids.tolist())
-    print("door2 limits:",
-        elevator.data.soft_joint_pos_limits[0, animate_elevator_ids, 0].item(),
-        elevator.data.soft_joint_pos_limits[0, animate_elevator_ids, 1].item())
+    door2_xform = UsdGeom.XformCommonAPI(door2_prim)
 
+    # Cache initial transform (we'll only offset translation)
+    init_t, init_r, init_s, init_pivot, _ = door2_xform.GetXformVectors()
+    init_t = Gf.Vec3d(init_t)  # make sure it's a Vec3d
+    print("[INFO] Door2 initial translate:", init_t)
 
     sim_dt = sim.get_physics_dt()
     count = 0
     period = 500
+
+    open_delta = -0.5  # 5 cm along chosen axis
+    close_delta = 0.0
 
     while simulation_app.is_running():
         if count % period == 0:
@@ -104,25 +118,21 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
 
         alpha = (count % period) / max(1, period - 1)
 
-        open_pos = -0.9
-        close_pos = 0.0
-
         phase = count % period
-
-        if phase < 100:                      # opening
+        if phase < 100:        # opening
             t = phase / 99.0
-            target = close_pos + t * (open_pos - close_pos)
-            # print("opening", target)
-        elif phase < 400:                    # hold open
-            target = open_pos
-            # print("holding open", target)
-        elif phase < 500:                    # closing
+            delta = close_delta + t * (open_delta - close_delta)
+        elif phase < 400:      # hold open
+            delta = open_delta
+        else:                  # closing
             t = (phase - 400) / 99.0
-            target = open_pos + t * (close_pos - open_pos)
-            # print("closing", target)
-        else:                                # hold closed
-            target = close_pos
-            # print("holding closed", target)
+            delta = open_delta + t * (close_delta - open_delta)
+
+        new_t = Gf.Vec3d(init_t[0] + delta, init_t[1], init_t[2])
+        door2_xform.SetTranslate(new_t)
+
+        if count % 20 == 0:
+            print(f"[door2-mesh] delta={delta:+.4f} translate={new_t}")
 
         # control agibot
         joint_pos_target = agibot.data.default_joint_pos.clone()
@@ -133,23 +143,23 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
         agibot.set_joint_position_target(joint_pos_target)
 
         # control elevator doors
-        joint_pos_target = elevator.data.default_joint_pos.clone()
-        joint_pos_target[:, animate_elevator_ids] += target
-        joint_pos_target = joint_pos_target.clamp_(
-            elevator.data.soft_joint_pos_limits[..., 0], elevator.data.soft_joint_pos_limits[..., 1]
-        )
-        print("door2 target:", joint_pos_target[0, animate_elevator_ids].item())
-        elevator.set_joint_position_target(joint_pos_target)
+        # joint_pos_target = elevator.data.default_joint_pos.clone()
+        # joint_pos_target[:, animate_elevator_ids] += target
+        # joint_pos_target = joint_pos_target.clamp_(
+        #     elevator.data.soft_joint_pos_limits[..., 0], elevator.data.soft_joint_pos_limits[..., 1]
+        # )
+        # print("door2 target:", joint_pos_target[0, animate_elevator_ids].item())
+        # elevator.set_joint_position_target(joint_pos_target)
 
         # write to sim
         agibot.write_data_to_sim()
-        elevator.write_data_to_sim()
+        # elevator.write_data_to_sim()
 
         sim.step()
         count += 1
 
         agibot.update(sim_dt)
-        elevator.update(sim_dt)
+        # elevator.update(sim_dt)
 
 def main():
     """Main function."""
