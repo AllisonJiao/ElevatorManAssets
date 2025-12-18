@@ -3,9 +3,9 @@
     "file_records": [
         {
             "source_url": "/isaaclab/ElevatorManAssets/assets/Collected_elevator_asset/textures/color_191191191.hdr",
-            "source_hash": "4053a0477ad08e02364ecfea6bb77082935ca5ed",
+            "source_hash": "11ef337f63bab77fbc23778bc37564d451eb340d",
             "target_url": "./textures/color_191191191.hdr",
-            "target_hash": "1e11d689c15229a8bf8ada0cdbc45223f01db5d3"
+            "target_hash": "501b52ff317750959f809d44453e1d2485f4843e"
         }
     ]
 }
