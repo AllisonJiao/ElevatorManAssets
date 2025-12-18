@@ -128,9 +128,9 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     ], device=device)
 
     right_arm_goals = torch.tensor([
-        [0.45, -0.25, 0.60, 0.0, 0.707, 0.0, 0.707],
-        [0.50, -0.20, 0.50, 0.0, 0.707, 0.0, 0.707],
-        [0.40, -0.30, 0.55, 0.0, 0.707, 0.0, 0.707],
+        [0.45, 0.25, 0.60, 0.0, 0.707, 0.0, 0.707],
+        [0.50, 0.20, 0.50, 0.0, 0.707, 0.0, 0.707],
+        [0.40, 0.30, 0.55, 0.0, 0.707, 0.0, 0.707],
     ], device=device)
 
     left_cmd = torch.zeros(scene.num_envs, 7, device=device)
