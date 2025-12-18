@@ -31,7 +31,7 @@ from isaaclab.sim import SimulationContext
 from cfg.agibot import AGIBOT_A2D_CFG
 from cfg.elevator import ELEVATOR_CFG
 
-# NEW: USD access
+# USD access
 import omni.usd
 from pxr import UsdGeom, Gf, Usd
 
@@ -51,11 +51,6 @@ def design_scene() -> tuple[dict]:
     elevator_cfg.prim_path = "/World/Elevator/root"
     elevator = Articulation(cfg = elevator_cfg)
 
-    # Origin(s)
-    # origins = [[0.0, 0.0, 0.0]]
-    # Origin 1
-    # prim_utils.create_prim("/World/Origin1", "Xform", translation=origins[0])
-
     # Robot(s)
     agibot_cfg = AGIBOT_A2D_CFG.copy()
     agibot_cfg.prim_path = "/World/Robot"
@@ -69,18 +64,7 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
     agibot = entities["agibot"]
     elevator = entities["elevator"]
 
-    animate_agibot_joint_names = [
-        n for n in agibot.data.joint_names
-        if n.startswith("left_arm_joint") or n.startswith("right_arm_joint")
-    ]
-    animate_agibot_ids, _ = agibot.find_joints(animate_agibot_joint_names)
-    animate_agibot_ids = torch.as_tensor(animate_agibot_ids, device=agibot.device, dtype=torch.long)
-
-    # animate_elevator_joint_names = [ "door2_joint" ]
-    # animate_elevator_ids, _ = elevator.find_joints(animate_elevator_joint_names)
-    # animate_elevator_ids = torch.as_tensor(animate_elevator_ids, device=elevator.device, dtype=torch.long)
-    # --- NEW: Door2 prim transform animation (mesh-only) ---
-    # Use the path you see in Stage. From your screenshot it looks like:
+    # --- Door2 prim transform animation (mesh-only) ---
     DOOR2_PRIM_PATH = "/World/Elevator/root/Elevator/ElevatorRig/Door2/Cube_025"
     stage = omni.usd.get_context().get_stage()
     door2_prim = stage.GetPrimAtPath(DOOR2_PRIM_PATH)
@@ -94,14 +78,22 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
     tc = Usd.TimeCode.Default()
     init_t, init_r, init_s, init_pivot, _ = door2_xform.GetXformVectors(tc)
 
-    init_t = Gf.Vec3d(init_t)  # make sure it's a Vec3d
+    init_t = Gf.Vec3d(init_t)
     print("[INFO] Door2 initial translate:", init_t)
+
+    # --- Agibot joint animation setup ---
+    animate_agibot_joint_names = [
+        n for n in agibot.data.joint_names
+        if n.startswith("left_arm_joint") or n.startswith("right_arm_joint")
+    ]
+    animate_agibot_ids, _ = agibot.find_joints(animate_agibot_joint_names)
+    animate_agibot_ids = torch.as_tensor(animate_agibot_ids, device=agibot.device, dtype=torch.long)
 
     sim_dt = sim.get_physics_dt()
     count = 0
     period = 500
 
-    open_delta = -0.5  # 5 cm along chosen axis
+    open_delta = -0.5  # 50 cm along chosen axis
     close_delta = 0.0
 
     while simulation_app.is_running():
@@ -131,11 +123,9 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
             t = (phase - 400) / 99.0
             delta = open_delta + t * (close_delta - open_delta)
 
+        # control door2 mesh transform
         new_t = Gf.Vec3d(init_t[0] + delta, init_t[1], init_t[2])
         door2_xform.SetTranslate(new_t)
-
-        if count % 20 == 0:
-            print(f"[door2-mesh] delta={delta:+.4f} translate={new_t}")
 
         # control agibot
         joint_pos_target = agibot.data.default_joint_pos.clone()
@@ -145,24 +135,13 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
         )
         agibot.set_joint_position_target(joint_pos_target)
 
-        # control elevator doors
-        # joint_pos_target = elevator.data.default_joint_pos.clone()
-        # joint_pos_target[:, animate_elevator_ids] += target
-        # joint_pos_target = joint_pos_target.clamp_(
-        #     elevator.data.soft_joint_pos_limits[..., 0], elevator.data.soft_joint_pos_limits[..., 1]
-        # )
-        # print("door2 target:", joint_pos_target[0, animate_elevator_ids].item())
-        # elevator.set_joint_position_target(joint_pos_target)
-
         # write to sim
         agibot.write_data_to_sim()
-        # elevator.write_data_to_sim()
 
         sim.step()
         count += 1
 
         agibot.update(sim_dt)
-        # elevator.update(sim_dt)
 
 def main():
     """Main function."""
@@ -173,7 +152,6 @@ def main():
     sim.set_camera_view([2.5, 0.0, 4.0], [0.0, 0.0, 2.0])
     # Design scene
     scene_entities = design_scene()
-    # scene_origins = torch.tensor(scene_origins, device=sim.device)
     # Play the simulator
     sim.reset()
     # Now we are ready!
