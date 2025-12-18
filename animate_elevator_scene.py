@@ -161,6 +161,9 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     count = 0
     goal_idx = 0
 
+    open_delta = -0.5  # 50 cm along chosen axis
+    close_delta = 0.0
+
     # ---------------- Loop ----------------
     while simulation_app.is_running():
 
