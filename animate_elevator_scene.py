@@ -26,20 +26,20 @@ import torch
 
 import isaaclab.sim as sim_utils
 # import prims as prim_utils
-from isaaclab.assets import AssetBaseCfg
+from isaaclab.assets import AssetBaseCfg, Articulation
 from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.markers import VisualizationMarkers
 from isaaclab.markers.config import FRAME_MARKER_CFG
 from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.utils import configclass
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab.utils.math import subtract_frame_transforms
 
 ##
 # Pre-defined configs
 ##
 from cfg.agibot import AGIBOT_A2D_CFG  # isort:skip
+from cfg.elevator import ELEVATOR_CFG  # isort:skip
 
 # USD access
 import omni.usd
@@ -65,10 +65,7 @@ class ElevatorSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.DomeLightCfg(intensity=3000.0),
     )
 
-    elevator = AssetBaseCfg(
-        prim_path="/World/Elevator/root",
-        spawn=sim_utils.UsdFileCfg(usd_path=ELEVATOR_ASSET_PATH),
-    )
+    elevator = ELEVATOR_CFG.replace(prim_path="/World/Elevator/root")
 
     robot = AGIBOT_A2D_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
