@@ -1,31 +1,11 @@
-# Copyright (c) 2022-2025, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
-# All rights reserved.
-#
+# Copyright (c) 2022-2025, The Isaac Lab Project Developers
 # SPDX-License-Identifier: BSD-3-Clause
 
 import argparse
-
-from isaaclab.app import AppLauncher
-
-# add argparse arguments
-parser = argparse.ArgumentParser(
-    description="This script demonstrates adding a custom elevator to an Isaac Lab environment."
-)
-parser.add_argument("--robot", type=str, default="agibot", help="Name of the robot.")
-parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
-# append AppLauncher cli args
-AppLauncher.add_app_launcher_args(parser)
-# parse the arguments
-args_cli = parser.parse_args()
-
-# launch omniverse app
-app_launcher = AppLauncher(args_cli)
-simulation_app = app_launcher.app
-
 import torch
 
+from isaaclab.app import AppLauncher
 import isaaclab.sim as sim_utils
-# import prims as prim_utils
 from isaaclab.assets import AssetBaseCfg
 from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
 from isaaclab.managers import SceneEntityCfg
@@ -33,206 +13,205 @@ from isaaclab.markers import VisualizationMarkers
 from isaaclab.markers.config import FRAME_MARKER_CFG
 from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.utils import configclass
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab.utils.math import subtract_frame_transforms
 
-##
-# Pre-defined configs
-##
-from cfg.agibot import AGIBOT_A2D_CFG  # isort:skip
+from cfg.agibot import AGIBOT_A2D_CFG
 from cfg.elevator import ELEVATOR_CFG
 
-# USD access
 import omni.usd
 from pxr import UsdGeom, Gf, Usd
 
+
+# -----------------------------------------------------------------------------
+# App launcher
+# -----------------------------------------------------------------------------
+parser = argparse.ArgumentParser()
+parser.add_argument("--robot", type=str, default="agibot")
+parser.add_argument("--num_envs", type=int, default=1)
+AppLauncher.add_app_launcher_args(parser)
+args_cli = parser.parse_args()
+
+app_launcher = AppLauncher(args_cli)
+simulation_app = app_launcher.app
+
+
+# -----------------------------------------------------------------------------
+# Scene config
+# -----------------------------------------------------------------------------
 ELEVATOR_ASSET_PATH = "ElevatorManAssets/assets/Collected_elevator_asset_tmp/elevator_asset.usdc"
+
 
 @configclass
 class ElevatorSceneCfg(InteractiveSceneCfg):
-    """Configuration for an elevator man scene."""
 
-    # ground plane
     ground = AssetBaseCfg(
         prim_path="/World/defaultGroundPlane",
         spawn=sim_utils.GroundPlaneCfg(),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -1.05)),
     )
 
-    # lights
     dome_light = AssetBaseCfg(
-        prim_path="/World/Light", spawn=sim_utils.DomeLightCfg(intensity=3000.0, color=(0.75, 0.75, 0.75))
+        prim_path="/World/Light",
+        spawn=sim_utils.DomeLightCfg(intensity=3000.0),
     )
 
-    # elevator
     elevator = AssetBaseCfg(
         prim_path="/World/Elevator/root",
-        spawn=sim_utils.UsdFileCfg(
-            usd_path=f"{ELEVATOR_ASSET_PATH}", scale=(1.0, 1.0, 1.0)
-        ),
+        spawn=sim_utils.UsdFileCfg(usd_path=ELEVATOR_ASSET_PATH),
     )
 
-    # articulation
-    if args_cli.robot == "agibot":
-        robot = AGIBOT_A2D_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
-    else:
-        raise ValueError(f"Robot {args_cli.robot} is not supported. Valid: agibot")
+    robot = AGIBOT_A2D_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
+
+# -----------------------------------------------------------------------------
+# Simulator loop
+# -----------------------------------------------------------------------------
 def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
-    """Runs the simulation loop."""
-    # Extract scene entities
-    # note: we only do this here for readability.
+
     robot = scene["robot"]
+    device = robot.device
 
-    # Create controller
-    diff_ik_cfg = DifferentialIKControllerCfg(command_type="pose", use_relative_mode=False, ik_method="dls")
-    diff_ik_controller = DifferentialIKController(diff_ik_cfg, num_envs=scene.num_envs, device=sim.device)
+    # ---------------- IK controllers ----------------
+    ik_cfg = DifferentialIKControllerCfg(
+        command_type="pose",
+        use_relative_mode=False,
+        ik_method="dls",
+    )
 
-    # Markers
-    frame_marker_cfg = FRAME_MARKER_CFG.copy()
-    frame_marker_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
-    ee_marker = VisualizationMarkers(frame_marker_cfg.replace(prim_path="/Visuals/ee_current"))
-    goal_marker = VisualizationMarkers(frame_marker_cfg.replace(prim_path="/Visuals/ee_goal"))
+    left_ik = DifferentialIKController(ik_cfg, scene.num_envs, device)
+    right_ik = DifferentialIKController(ik_cfg, scene.num_envs, device)
 
-    # Define goals for the arm
-    ee_goals = [
-        [0.5, 0.5, 0.7, 0.707, 0, 0.707, 0],
-        [0.5, -0.4, 0.6, 0.707, 0.707, 0.0, 0.0],
-        [0.5, 0, 0.5, 0.0, 1.0, 0.0, 0.0],
-    ]
-    ee_goals = torch.tensor(ee_goals, device=sim.device)
-    # Track the given command
-    current_goal_idx = 0
-    # Create buffers to store actions
-    ik_commands = torch.zeros(scene.num_envs, diff_ik_controller.action_dim, device=robot.device)
-    ik_commands[:] = ee_goals[current_goal_idx]
+    # ---------------- Scene entities ----------------
+    left_cfg = SceneEntityCfg(
+        "robot",
+        joint_names=["left_arm_joint[1-7]"],
+        body_names=["Link6_l"],
+    )
+    right_cfg = SceneEntityCfg(
+        "robot",
+        joint_names=["right_arm_joint[1-7]"],
+        body_names=["Link6_r"],
+    )
 
-    # Specify robot-specific parameters
-    if args_cli.robot == "agibot":
-        robot_entity_cfg = SceneEntityCfg(
-            "robot", 
-            joint_names=["left_arm_joint[1-7]"], 
-            body_names=["Link6_l"]
-        )
-    else:
-        raise ValueError(f"Robot {args_cli.robot} is not supported. Valid: agibot, ur10")
-    # Resolving the scene entities
-    robot_entity_cfg.resolve(scene)
-    # Obtain the frame index of the end-effector
-    # For a fixed base robot, the frame index is one less than the body index. This is because
-    # the root body is not included in the returned Jacobians.
+    left_cfg.resolve(scene)
+    right_cfg.resolve(scene)
+
     if robot.is_fixed_base:
-        ee_jacobi_idx = robot_entity_cfg.body_ids[0] - 1
+        left_ee_jac = left_cfg.body_ids[0] - 1
+        right_ee_jac = right_cfg.body_ids[0] - 1
     else:
-        ee_jacobi_idx = robot_entity_cfg.body_ids[0]
+        left_ee_jac = left_cfg.body_ids[0]
+        right_ee_jac = right_cfg.body_ids[0]
 
-    # --- Door2 prim transform animation (mesh-only) ---
-    DOOR2_PRIM_PATH = "/World/Elevator/root/Elevator/ElevatorRig/Door2/Cube_025"
-    stage = omni.usd.get_context().get_stage()
-    door2_prim = stage.GetPrimAtPath(DOOR2_PRIM_PATH)
-    
-    if not door2_prim.IsValid():
-        raise RuntimeError(f"Door2 prim not found at: {DOOR2_PRIM_PATH}")
+    # ---------------- Markers ----------------
+    frame_cfg = FRAME_MARKER_CFG.copy()
+    frame_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
 
-    door2_xform = UsdGeom.XformCommonAPI(door2_prim)
+    left_ee_marker = VisualizationMarkers(frame_cfg.replace(prim_path="/Visuals/left_ee"))
+    right_ee_marker = VisualizationMarkers(frame_cfg.replace(prim_path="/Visuals/right_ee"))
+    left_goal_marker = VisualizationMarkers(frame_cfg.replace(prim_path="/Visuals/left_goal"))
+    right_goal_marker = VisualizationMarkers(frame_cfg.replace(prim_path="/Visuals/right_goal"))
 
-    # Cache initial transform (we'll only offset translation)
-    tc = Usd.TimeCode.Default()
-    init_t, init_r, init_s, init_pivot, _ = door2_xform.GetXformVectors(tc)
+    # ---------------- Goals ----------------
+    left_arm_goals = torch.tensor([
+        [0.45,  0.25, 0.60, 0.0, 0.707, 0.0, 0.707],
+        [0.50,  0.20, 0.50, 0.0, 0.707, 0.0, 0.707],
+        [0.40,  0.30, 0.55, 0.0, 0.707, 0.0, 0.707],
+    ], device=device)
 
-    init_t = Gf.Vec3d(init_t)
-    print("[INFO] Door2 initial translate:", init_t)
+    right_arm_goals = torch.tensor([
+        [0.45, -0.25, 0.60, 0.0, 0.707, 0.0, 0.707],
+        [0.50, -0.20, 0.50, 0.0, 0.707, 0.0, 0.707],
+        [0.40, -0.30, 0.55, 0.0, 0.707, 0.0, 0.707],
+    ], device=device)
 
-    # Define simulation stepping
+    left_cmd = torch.zeros(scene.num_envs, 7, device=device)
+    right_cmd = torch.zeros(scene.num_envs, 7, device=device)
+
+    # ---------------- Timing ----------------
     sim_dt = sim.get_physics_dt()
-    count = 0
     period = 500
+    count = 0
+    goal_idx = 0
 
-    open_delta = -0.5  # 50 cm along chosen axis
-    close_delta = 0.0
-
+    # ---------------- Loop ----------------
     while simulation_app.is_running():
+
         if count % period == 0:
             count = 0
-            # reset joint state
-            joint_pos = robot.data.default_joint_pos.clone()
-            joint_vel = robot.data.default_joint_vel.clone()
-            robot.write_joint_state_to_sim(joint_pos, joint_vel)
-            robot.reset()
-            # reset actions
-            ik_commands[:] = ee_goals[current_goal_idx]
-            joint_pos_des = joint_pos[:, robot_entity_cfg.joint_ids].clone()
-            # reset controller
-            diff_ik_controller.reset()
-            diff_ik_controller.set_command(ik_commands)
-            # change goal
-            current_goal_idx = (current_goal_idx + 1) % len(ee_goals)
-            print("[INFO]: Resetting state...")
-        else:
 
-            phase = count % period
-            if phase < 100:        # opening
-                t = phase / 99.0
-                delta = close_delta + t * (open_delta - close_delta)
-            elif phase < 400:      # hold open
-                delta = open_delta
-            else:                  # closing
-                t = (phase - 400) / 99.0
-                delta = open_delta + t * (close_delta - open_delta)
-
-            # control door2 mesh transform
-            new_t = Gf.Vec3d(init_t[0] + delta, init_t[1], init_t[2])
-            door2_xform.SetTranslate(new_t)
-
-            # control agibot
-            # obtain quantities from simulation
-            jacobian = robot.root_physx_view.get_jacobians()[:, ee_jacobi_idx, :, robot_entity_cfg.joint_ids]
-            ee_pose_w = robot.data.body_pose_w[:, robot_entity_cfg.body_ids[0]]
-            root_pose_w = robot.data.root_pose_w
-            joint_pos = robot.data.joint_pos[:, robot_entity_cfg.joint_ids]
-            # compute frame in root frame
-            ee_pos_b, ee_quat_b = subtract_frame_transforms(
-                root_pose_w[:, 0:3], root_pose_w[:, 3:7], ee_pose_w[:, 0:3], ee_pose_w[:, 3:7]
+            robot.write_joint_state_to_sim(
+                robot.data.default_joint_pos,
+                robot.data.default_joint_vel,
             )
-            # compute the joint commands
-            joint_pos_des = diff_ik_controller.compute(ee_pos_b, ee_quat_b, jacobian, joint_pos)
-        
-        # apply actions
-        robot.set_joint_position_target(joint_pos_des, joint_ids=robot_entity_cfg.joint_ids)
+            robot.reset()
+
+            goal_idx = (goal_idx + 1) % left_arm_goals.shape[0]
+            left_cmd[:] = left_arm_goals[goal_idx]
+            right_cmd[:] = right_arm_goals[goal_idx]
+
+            left_ik.reset()
+            left_ik.set_command(left_cmd)
+
+            right_ik.reset()
+            right_ik.set_command(right_cmd)
+
+        # ---------------- Left arm IK ----------------
+        root_w = robot.data.root_pose_w
+
+        left_ee_w = robot.data.body_pose_w[:, left_cfg.body_ids[0]]
+        left_jac = robot.root_physx_view.get_jacobians()[:, left_ee_jac, :, left_cfg.joint_ids]
+        left_q = robot.data.joint_pos[:, left_cfg.joint_ids]
+
+        left_pos_b, left_quat_b = subtract_frame_transforms(
+            root_w[:, :3], root_w[:, 3:7],
+            left_ee_w[:, :3], left_ee_w[:, 3:7],
+        )
+
+        left_q_des = left_ik.compute(left_pos_b, left_quat_b, left_jac, left_q)
+
+        # ---------------- Right arm IK ----------------
+        right_ee_w = robot.data.body_pose_w[:, right_cfg.body_ids[0]]
+        right_jac = robot.root_physx_view.get_jacobians()[:, right_ee_jac, :, right_cfg.joint_ids]
+        right_q = robot.data.joint_pos[:, right_cfg.joint_ids]
+
+        right_pos_b, right_quat_b = subtract_frame_transforms(
+            root_w[:, :3], root_w[:, 3:7],
+            right_ee_w[:, :3], right_ee_w[:, 3:7],
+        )
+
+        right_q_des = right_ik.compute(right_pos_b, right_quat_b, right_jac, right_q)
+
+        # ---------------- Apply ----------------
+        robot.set_joint_position_target(left_q_des, left_cfg.joint_ids)
+        robot.set_joint_position_target(right_q_des, right_cfg.joint_ids)
+
         scene.write_data_to_sim()
-        # perform step
         sim.step()
-        # update sim-time
-        count += 1
-        # update buffers
         scene.update(sim_dt)
+        count += 1
 
-        # obtain quantities from simulation
-        ee_pose_w = robot.data.body_state_w[:, robot_entity_cfg.body_ids[0], 0:7]
-        # update marker positions
-        ee_marker.visualize(ee_pose_w[:, 0:3], ee_pose_w[:, 3:7])
-        goal_marker.visualize(ik_commands[:, 0:3] + scene.env_origins, ik_commands[:, 3:7])
+        # ---------------- Visuals ----------------
+        left_ee_marker.visualize(left_ee_w[:, :3], left_ee_w[:, 3:7])
+        right_ee_marker.visualize(right_ee_w[:, :3], right_ee_w[:, 3:7])
+        left_goal_marker.visualize(left_cmd[:, :3] + scene.env_origins, left_cmd[:, 3:7])
+        right_goal_marker.visualize(right_cmd[:, :3] + scene.env_origins, right_cmd[:, 3:7])
 
+
+# -----------------------------------------------------------------------------
+# Main
+# -----------------------------------------------------------------------------
 def main():
-    """Main function."""
-    # Load kit helper
-    sim_cfg = sim_utils.SimulationCfg(device=args_cli.device)
-    sim = sim_utils.SimulationContext(sim_cfg)
-    # Set main camera
+    sim = sim_utils.SimulationContext(sim_utils.SimulationCfg(device=args_cli.device))
     sim.set_camera_view([2.5, 0.0, 4.0], [0.0, 0.0, 2.0])
-    # Design scene
-    scene_cfg = ElevatorSceneCfg(num_envs=args_cli.num_envs, env_spacing=2.0)
-    scene = InteractiveScene(scene_cfg)
-    # Play the simulator
+
+    scene = InteractiveScene(ElevatorSceneCfg(num_envs=args_cli.num_envs))
     sim.reset()
-    # Now we are ready!
-    print("[INFO]: Setup complete...")
-    # Run the simulator
+
+    print("[INFO] Setup complete.")
     run_simulator(sim, scene)
 
 
 if __name__ == "__main__":
-    # run the main function
     main()
-    # close sim app
     simulation_app.close()
