@@ -76,6 +76,13 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
     animate_elevator_ids, _ = elevator.find_joints(animate_elevator_joint_names)
     animate_elevator_ids = torch.as_tensor(animate_elevator_ids, device=elevator.device, dtype=torch.long)
 
+    print("Elevator joints:", elevator.data.joint_names)
+    print("door2 id:", animate_elevator_ids.tolist())
+    print("door2 limits:",
+        elevator.data.soft_joint_pos_limits[0, animate_elevator_ids, 0].item(),
+        elevator.data.soft_joint_pos_limits[0, animate_elevator_ids, 1].item())
+
+
     sim_dt = sim.get_physics_dt()
     count = 0
     period = 500
