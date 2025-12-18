@@ -112,17 +112,17 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
         if phase < 100:                      # opening
             t = phase / 99.0
             target = close_pos + t * (open_pos - close_pos)
-            print("opening", target)
+            # print("opening", target)
         elif phase < 400:                    # hold open
             target = open_pos
-            print("holding open", target)
+            # print("holding open", target)
         elif phase < 500:                    # closing
             t = (phase - 400) / 99.0
             target = open_pos + t * (close_pos - open_pos)
-            print("closing", target)
+            # print("closing", target)
         else:                                # hold closed
             target = close_pos
-            print("holding closed", target)
+            # print("holding closed", target)
 
         # control agibot
         joint_pos_target = agibot.data.default_joint_pos.clone()
@@ -134,10 +134,11 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
 
         # control elevator doors
         joint_pos_target = elevator.data.default_joint_pos.clone()
-        joint_pos_target[:, animate_elevator_ids] = target
+        joint_pos_target[:, animate_elevator_ids] += target
         joint_pos_target = joint_pos_target.clamp_(
             elevator.data.soft_joint_pos_limits[..., 0], elevator.data.soft_joint_pos_limits[..., 1]
         )
+        print("door2 target:", joint_pos_target[0, animate_elevator_ids].item())
         elevator.set_joint_position_target(joint_pos_target)
 
         # write to sim
