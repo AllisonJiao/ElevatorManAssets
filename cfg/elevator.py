@@ -27,7 +27,7 @@ ELEVATOR_CFG = ArticulationCfg(
         usd_path=f"{ELEVATOR_ASSET_PATH}",
         activate_contact_sensors=False, # Temp set to False
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
-            disable_gravity=True,
+            disable_gravity=False,
             max_depenetration_velocity=5.0,
         ),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
