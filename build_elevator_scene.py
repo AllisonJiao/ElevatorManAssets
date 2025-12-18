@@ -79,7 +79,7 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
     while simulation_app.is_running():
         if count % period == 0:
             count = 0
-            for a in [agibot, elevator]:
+            for a in [agibot]:
                 root_state = a.data.default_root_state.clone()
                 a.write_root_pose_to_sim(root_state[:, :7])
                 a.write_root_velocity_to_sim(root_state[:, 7:])
