@@ -33,7 +33,7 @@ from cfg.elevator import ELEVATOR_CFG
 
 # NEW: USD access
 import omni.usd
-from pxr import UsdGeom, Gf
+from pxr import UsdGeom, Gf, Usd
 
 def design_scene() -> tuple[dict]:
     """Designs the scene."""
@@ -90,7 +90,9 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
     door2_xform = UsdGeom.XformCommonAPI(door2_prim)
 
     # Cache initial transform (we'll only offset translation)
-    init_t, init_r, init_s, init_pivot, _ = door2_xform.GetXformVectors()
+    tc = Usd.TimeCode.Default()
+    init_t, init_r, init_s, init_pivot, _ = door2_xform.GetXformVectors(tc)
+
     init_t = Gf.Vec3d(init_t)  # make sure it's a Vec3d
     print("[INFO] Door2 initial translate:", init_t)
 
