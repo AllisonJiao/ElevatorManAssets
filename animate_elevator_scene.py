@@ -41,10 +41,6 @@ from isaaclab.utils.math import subtract_frame_transforms
 from cfg.agibot import AGIBOT_A2D_CFG  # isort:skip
 from cfg.elevator import ELEVATOR_CFG  # isort:skip
 
-# USD access
-import omni.usd
-from pxr import UsdGeom, Gf, Usd
-
 # -----------------------------------------------------------------------------
 # Scene config
 # -----------------------------------------------------------------------------
@@ -77,6 +73,10 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
     robot = scene["robot"]
     device = robot.device
+
+    elevator = scene["elevator"]
+    print("[INFO] elevator joints:", elevator.data.joint_names)
+
 
     # ---------------- IK controllers ----------------
     ik_cfg = DifferentialIKControllerCfg(
@@ -135,31 +135,11 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     left_cmd = torch.zeros(scene.num_envs, 7, device=device)
     right_cmd = torch.zeros(scene.num_envs, 7, device=device)
 
-    # --- Door2 prim transform animation (mesh-only) ---
-    DOOR2_PRIM_PATH = "/World/Elevator/root/Elevator/ElevatorRig/Door2/Cube_025"
-    stage = omni.usd.get_context().get_stage()
-    door2_prim = stage.GetPrimAtPath(DOOR2_PRIM_PATH)
-    
-    if not door2_prim.IsValid():
-        raise RuntimeError(f"Door2 prim not found at: {DOOR2_PRIM_PATH}")
-
-    door2_xform = UsdGeom.XformCommonAPI(door2_prim)
-
-    # Cache initial transform (we'll only offset translation)
-    tc = Usd.TimeCode.Default()
-    init_t, init_r, init_s, init_pivot, _ = door2_xform.GetXformVectors(tc)
-
-    init_t = Gf.Vec3d(init_t)
-    print("[INFO] Door2 initial translate:", init_t)
-
     # ---------------- Timing ----------------
     sim_dt = sim.get_physics_dt()
     period = 500
     count = 0
     goal_idx = 0
-
-    open_delta = -0.5  # 50 cm along chosen axis
-    close_delta = 0.0
 
     # ---------------- Loop ----------------
     while simulation_app.is_running():
@@ -182,21 +162,6 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
             right_ik.reset()
             right_ik.set_command(right_cmd)
-        
-        # --- Animate door2 ---
-        phase = count % period
-        if phase < 100:        # opening
-            t = phase / 99.0
-            delta = close_delta + t * (open_delta - close_delta)
-        elif phase < 400:      # hold open
-            delta = open_delta
-        else:                  # closing
-            t = (phase - 400) / 99.0
-            delta = open_delta + t * (close_delta - open_delta)
-
-        # control door2 mesh transform
-        new_t = Gf.Vec3d(init_t[0] + delta, init_t[1], init_t[2])
-        door2_xform.SetTranslate(new_t)
 
         # ---------------- Left arm IK ----------------
         root_w = robot.data.root_pose_w
