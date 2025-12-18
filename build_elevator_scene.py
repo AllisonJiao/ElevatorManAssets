@@ -81,9 +81,10 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
     # animate_elevator_ids = torch.as_tensor(animate_elevator_ids, device=elevator.device, dtype=torch.long)
     # --- NEW: Door2 prim transform animation (mesh-only) ---
     # Use the path you see in Stage. From your screenshot it looks like:
-    DOOR2_PRIM_PATH = "/World/Elevator/root/Elevator/ElevatorRig/Door2"
+    DOOR2_PRIM_PATH = "/World/Elevator/root/Elevator/ElevatorRig/Door2/Cube_025"
     stage = omni.usd.get_context().get_stage()
     door2_prim = stage.GetPrimAtPath(DOOR2_PRIM_PATH)
+    
     if not door2_prim.IsValid():
         raise RuntimeError(f"Door2 prim not found at: {DOOR2_PRIM_PATH}")
 
