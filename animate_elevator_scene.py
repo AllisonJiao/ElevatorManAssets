@@ -95,10 +95,15 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
         joint_names=["left_arm_joint[1-5]"],
         body_names=["Link4_l"],
     )
+    # right_cfg = SceneEntityCfg(
+    #     "robot",
+    #     joint_names=["right_arm_joint[1-5]"],
+    #     body_names=["Link4_r"],
+    # )
     right_cfg = SceneEntityCfg(
         "robot",
-        joint_names=["right_arm_joint[1-5]"],
-        body_names=["Link4_r"],
+        joint_names=["left_arm_joint[6-7]"],
+        body_names=["Link6_l"],
     )
 
     left_cfg.resolve(scene)
