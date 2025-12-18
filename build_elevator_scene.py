@@ -65,12 +65,16 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
     agibot = entities["agibot"]
     elevator = entities["elevator"]
 
-    animate_joint_names = [
+    animate_agibot_joint_names = [
         n for n in agibot.data.joint_names
         if n.startswith("left_arm_joint") or n.startswith("right_arm_joint")
     ]
-    animate_ids, _ = agibot.find_joints(animate_joint_names)
-    animate_ids = torch.as_tensor(animate_ids, device=agibot.device, dtype=torch.long)
+    animate_agibot_ids, _ = agibot.find_joints(animate_agibot_joint_names)
+    animate_agibot_ids = torch.as_tensor(animate_agibot_ids, device=agibot.device, dtype=torch.long)
+
+    animate_elevator_joint_names = [ "door1_joint", "door2_joint" ]
+    animate_elevator_ids, _ = elevator.find_joints(animate_elevator_joint_names)
+    animate_elevator_ids = torch.as_tensor(animate_elevator_ids, device=elevator.device, dtype=torch.long)
 
     sim_dt = sim.get_physics_dt()
     count = 0
@@ -93,23 +97,47 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
 
         alpha = (count % period) / max(1, period - 1)
 
-        # control agibot ONLY
+        open_pos = 0.05
+        close_pos = 0.0
+
+        phase = count % period
+
+        if phase < 100:                      # opening
+            t = phase / 99.0
+            target = close_pos + t * (open_pos - close_pos)
+        elif phase < 400:                    # hold open
+            target = open_pos
+        elif phase < 500:                    # closing
+            t = (phase - 400) / 99.0
+            target = open_pos + t * (close_pos - open_pos)
+        else:                                # hold closed
+            target = close_pos
+
+        # control agibot
         joint_pos_target = agibot.data.default_joint_pos.clone()
-        joint_pos_target[:, animate_ids] += alpha * (2 * torch.pi)
+        joint_pos_target[:, animate_agibot_ids] += alpha * (2 * torch.pi)
         joint_pos_target = joint_pos_target.clamp_(
             agibot.data.soft_joint_pos_limits[..., 0], agibot.data.soft_joint_pos_limits[..., 1]
         )
         agibot.set_joint_position_target(joint_pos_target)
 
+        # control elevator doors
+        joint_pos_target = elevator.data.default_joint_pos.clone()
+        joint_pos_target[:, animate_elevator_ids] = target
+        joint_pos_target = joint_pos_target.clamp_(
+            elevator.data.soft_joint_pos_limits[..., 0], elevator.data.soft_joint_pos_limits[..., 1]
+        )
+        elevator.set_joint_position_target(joint_pos_target)
+
         # write to sim
         agibot.write_data_to_sim()
-        # elevator.write_data_to_sim()  # no control yet
+        elevator.write_data_to_sim()
 
         sim.step()
         count += 1
 
         agibot.update(sim_dt)
-        # elevator.update(sim_dt)
+        elevator.update(sim_dt)
 
 def main():
     """Main function."""
