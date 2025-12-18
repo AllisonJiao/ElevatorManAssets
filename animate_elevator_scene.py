@@ -46,7 +46,6 @@ from cfg.elevator import ELEVATOR_CFG
 import omni.usd
 from pxr import UsdGeom, Gf, Usd
 
-
 # -----------------------------------------------------------------------------
 # Scene config
 # -----------------------------------------------------------------------------
@@ -214,13 +213,20 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 # Main
 # -----------------------------------------------------------------------------
 def main():
-    sim = sim_utils.SimulationContext(sim_utils.SimulationCfg(device=args_cli.device))
+    """Main function."""
+    # Load kit helper
+    sim_cfg = sim_utils.SimulationCfg(device=args_cli.device)
+    sim = sim_utils.SimulationContext(sim_cfg)
+    # Set main camera
     sim.set_camera_view([2.5, 0.0, 4.0], [0.0, 0.0, 2.0])
-
-    scene = InteractiveScene(ElevatorSceneCfg(num_envs=args_cli.num_envs))
+    # Design scene
+    scene_cfg = ElevatorSceneCfg(num_envs=args_cli.num_envs, env_spacing=2.0)
+    scene = InteractiveScene(scene_cfg)
+    # Play the simulator
     sim.reset()
-
-    print("[INFO] Setup complete.")
+    # Now we are ready!
+    print("[INFO]: Setup complete...")
+    # Run the simulator
     run_simulator(sim, scene)
 
 
