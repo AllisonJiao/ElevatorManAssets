@@ -1,11 +1,31 @@
-# Copyright (c) 2022-2025, The Isaac Lab Project Developers
+# Copyright (c) 2022-2025, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
+# All rights reserved.
+#
 # SPDX-License-Identifier: BSD-3-Clause
 
 import argparse
-import torch
 
 from isaaclab.app import AppLauncher
+
+# add argparse arguments
+parser = argparse.ArgumentParser(
+    description="This script demonstrates adding a custom elevator to an Isaac Lab environment."
+)
+parser.add_argument("--robot", type=str, default="agibot", help="Name of the robot.")
+parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
+# append AppLauncher cli args
+AppLauncher.add_app_launcher_args(parser)
+# parse the arguments
+args_cli = parser.parse_args()
+
+# launch omniverse app
+app_launcher = AppLauncher(args_cli)
+simulation_app = app_launcher.app
+
+import torch
+
 import isaaclab.sim as sim_utils
+# import prims as prim_utils
 from isaaclab.assets import AssetBaseCfg
 from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
 from isaaclab.managers import SceneEntityCfg
@@ -13,26 +33,18 @@ from isaaclab.markers import VisualizationMarkers
 from isaaclab.markers.config import FRAME_MARKER_CFG
 from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.utils import configclass
+from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab.utils.math import subtract_frame_transforms
 
-from cfg.agibot import AGIBOT_A2D_CFG
+##
+# Pre-defined configs
+##
+from cfg.agibot import AGIBOT_A2D_CFG  # isort:skip
 from cfg.elevator import ELEVATOR_CFG
 
+# USD access
 import omni.usd
 from pxr import UsdGeom, Gf, Usd
-
-
-# -----------------------------------------------------------------------------
-# App launcher
-# -----------------------------------------------------------------------------
-parser = argparse.ArgumentParser()
-parser.add_argument("--robot", type=str, default="agibot")
-parser.add_argument("--num_envs", type=int, default=1)
-AppLauncher.add_app_launcher_args(parser)
-args_cli = parser.parse_args()
-
-app_launcher = AppLauncher(args_cli)
-simulation_app = app_launcher.app
 
 
 # -----------------------------------------------------------------------------
