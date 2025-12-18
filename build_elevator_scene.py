@@ -103,13 +103,13 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
 
         # write to sim
         agibot.write_data_to_sim()
-        elevator.write_data_to_sim()  # no control yet
+        # elevator.write_data_to_sim()  # no control yet
 
         sim.step()
         count += 1
 
         agibot.update(sim_dt)
-        elevator.update(sim_dt)
+        # elevator.update(sim_dt)
 
 def main():
     """Main function."""
