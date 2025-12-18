@@ -112,13 +112,17 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
         if phase < 100:                      # opening
             t = phase / 99.0
             target = close_pos + t * (open_pos - close_pos)
+            print("opening", target)
         elif phase < 400:                    # hold open
             target = open_pos
+            print("holding open", target)
         elif phase < 500:                    # closing
             t = (phase - 400) / 99.0
             target = open_pos + t * (close_pos - open_pos)
+            print("closing", target)
         else:                                # hold closed
             target = close_pos
+            print("holding closed", target)
 
         # control agibot
         joint_pos_target = agibot.data.default_joint_pos.clone()
