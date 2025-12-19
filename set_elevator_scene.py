@@ -12,6 +12,7 @@ parser = argparse.ArgumentParser(
     description="This script demonstrates adding a custom elevator to an Isaac Lab environment."
 )
 parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
+parser.add_argument("--robot_animation_range", type=float, default=0.1, help="Range of robot arm animation (0.0-1.0, where 1.0 = full 2π rotation)")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -216,7 +217,7 @@ def main():
     period = 500
     open_delta = -0.5  # 5 cm along chosen axis
     close_delta = 0.0
-    robot_animation_range = 0.1  # Reduce this value to make robot animation smaller (0.5 = half range, 1.0 = full 2π)
+    robot_animation_range = args_cli.robot_animation_range
 
     print("[INFO] Done. Close the window to exit.")
     while simulation_app.is_running():
