@@ -98,28 +98,26 @@ def set_articulation_joints_by_name(
     # Write back to simulator immediately (this is the "no simulation" teleport)
     art.write_joint_state_to_sim(q, qd, env_ids=env_ids)
 
-def set_robot_pose_demo(agibot: Articulation):
-    """Example: set some robot joints to fixed values instantly."""
-    # TODO: replace these names with YOUR robot's joint names
-    # Print available joints once:
-    print("\n[INFO] Robot joint names:")
-    for i, n in enumerate(agibot.joint_names):
-        print(f"  {i:02d}: {n}")
-
-    # Example targets (radians)
-    joint_targets = {
-        # "left_shoulder_pitch": 0.6,
-        # "left_elbow": -1.0,
-        # "right_shoulder_pitch": 0.6,
-        # "right_elbow": -1.0,
-    }
-
-    if len(joint_targets) == 0:
-        print("\n[WARN] joint_targets is empty. Fill in joint names from the printed list.")
+def set_robot_pose_demo(agibot: Articulation, phase: float, animate_joint_ids: torch.Tensor):
+    """Set robot joints based on phase for smooth animation.
+    
+    Args:
+        agibot: The robot articulation
+        phase: Normalized phase value [0, 1] for animation cycle
+        animate_joint_ids: Tensor of joint indices to animate
+    """
+    if len(animate_joint_ids) == 0:
         return
-
-    set_articulation_joints_by_name(agibot, joint_targets)
-    print("[INFO] Wrote robot joint state directly.")
+    
+    # Calculate joint positions based on phase (smooth rotation)
+    joint_pos_target = agibot.data.default_joint_pos.clone()
+    joint_pos_target[:, animate_joint_ids] += phase * (2 * torch.pi)
+    joint_pos_target = joint_pos_target.clamp_(
+        agibot.data.soft_joint_pos_limits[..., 0], 
+        agibot.data.soft_joint_pos_limits[..., 1]
+    )
+    agibot.set_joint_position_target(joint_pos_target)
+    agibot.write_data_to_sim()
 
 def main():
     sim_cfg = sim_utils.SimulationCfg(device=args_cli.device)
@@ -135,16 +133,18 @@ def main():
     # Access the robot articulation (because we used ArticulationCfg)
     agibot: Articulation = scene["agibot"]
 
-    # Make sure buffers are valid
-    scene.update(sim.get_physics_dt())
-
-    # 1) Instantly set joint positions once
-    set_robot_pose_demo(agibot)
-
-    # 2) Step a few frames only to refresh viewport (not "simulating" motion)
-    for _ in range(5):
-        sim.step()
-        scene.update(sim.get_physics_dt())
+    # Setup robot joint animation
+    animate_agibot_joint_names = [
+        n for n in agibot.data.joint_names
+        if n.startswith("left_arm_joint") or n.startswith("right_arm_joint")
+    ]
+    animate_agibot_ids, _ = agibot.find_joints(animate_agibot_joint_names)
+    if len(animate_agibot_ids) > 0:
+        animate_agibot_ids = torch.as_tensor(animate_agibot_ids, device=agibot.device, dtype=torch.long)
+        print(f"[INFO] Animating {len(animate_agibot_ids)} robot arm joints: {animate_agibot_joint_names}")
+    else:
+        animate_agibot_ids = torch.tensor([], device=agibot.device, dtype=torch.long)
+        print("[WARN] No arm joints found for animation. Robot will use default pose.")
 
     # Setup door2 mesh transform animation
     DOOR2_PRIM_PATH = "/World/Elevator/root/Elevator/ElevatorRig/Door2/Cube_025"
@@ -170,8 +170,11 @@ def main():
 
     print("[INFO] Done. Close the window to exit.")
     while simulation_app.is_running():
-        # Calculate door animation delta based on phase
+        # Calculate phase for animations
         phase = count % period
+        alpha = phase / max(1, period - 1)  # Normalized phase [0, 1]
+        
+        # Calculate door animation delta based on phase
         if phase < 100:        # opening
             t = phase / 99.0
             delta = close_delta + t * (open_delta - close_delta)
@@ -184,6 +187,9 @@ def main():
         # Update door position
         new_t = Gf.Vec3d(init_t[0] + delta, init_t[1], init_t[2])
         door2_xform.SetTranslate(new_t, Usd.TimeCode.Default())
+
+        # Update robot pose using phase-based animation
+        set_robot_pose_demo(agibot, alpha, animate_agibot_ids)
 
         if count % 20 == 0:
             print(f"[door2-mesh] delta={delta:+.4f} translate={new_t}")
