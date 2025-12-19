@@ -108,7 +108,9 @@ def set_robot_pose_demo(
     robot_animation_range: float = 1.0,
     symmetric_base: bool = True,
     sequential: bool = True,
-    sequential_linkages: bool = True
+    sequential_linkages: bool = True,
+    cached_symmetric_refs: dict[str, torch.Tensor] = None,
+    cached_symmetric_ref_all: torch.Tensor = None
 ):
     """Set robot joints based on phase for smooth animation.
     
@@ -155,20 +157,25 @@ def set_robot_pose_demo(
     
     if symmetric_base and len(all_left_ids) > 0 and len(all_right_ids) > 0:
         # For symmetric motion: use average of left/right defaults as symmetric reference
-        # Compute symmetric ref for each group separately
-        symmetric_refs = {}
-        for group_name in group_names:
-            left_group_ids = left_joint_groups[group_name]
-            right_group_ids = right_joint_groups[group_name]
-            if len(left_group_ids) > 0 and len(right_group_ids) > 0:
-                left_default_group = agibot.data.default_joint_pos[:, left_group_ids]
-                right_default_group = agibot.data.default_joint_pos[:, right_group_ids]
-                symmetric_refs[group_name] = (left_default_group + right_default_group) / 2.0
-        
-        # Also compute for all joints together (for non-sequential-linkages case)
-        left_default_all = agibot.data.default_joint_pos[:, all_left_ids]
-        right_default_all = agibot.data.default_joint_pos[:, all_right_ids]
-        symmetric_ref_all = (left_default_all + right_default_all) / 2.0
+        # Use cached references if provided, otherwise compute them
+        if cached_symmetric_refs is not None and cached_symmetric_ref_all is not None:
+            symmetric_refs = cached_symmetric_refs
+            symmetric_ref_all = cached_symmetric_ref_all
+        else:
+            # Compute symmetric ref for each group separately
+            symmetric_refs = {}
+            for group_name in group_names:
+                left_group_ids = left_joint_groups[group_name]
+                right_group_ids = right_joint_groups[group_name]
+                if len(left_group_ids) > 0 and len(right_group_ids) > 0:
+                    left_default_group = agibot.data.default_joint_pos[:, left_group_ids]
+                    right_default_group = agibot.data.default_joint_pos[:, right_group_ids]
+                    symmetric_refs[group_name] = (left_default_group + right_default_group) / 2.0
+            
+            # Also compute for all joints together (for non-sequential-linkages case)
+            left_default_all = agibot.data.default_joint_pos[:, all_left_ids]
+            right_default_all = agibot.data.default_joint_pos[:, all_right_ids]
+            symmetric_ref_all = (left_default_all + right_default_all) / 2.0
         
         if sequential:
             # Sequential movement: left arm moves first (phase 0-0.5), then right arm (phase 0.5-1.0)
@@ -321,9 +328,28 @@ def main():
         
         # Debug: Check default positions for symmetry
         scene.update(sim.get_physics_dt())  # Ensure data is updated
+        
+        # Cache symmetric reference positions once (computed from default positions)
+        # This ensures consistent symmetry across all animation cycles
+        group_names = list(left_joint_groups.keys())
+        cached_symmetric_refs = {}
+        all_left_ids = torch.cat([ids for ids in left_joint_groups.values()])
+        all_right_ids = torch.cat([ids for ids in right_joint_groups.values()])
+        for group_name in group_names:
+            left_group_ids = left_joint_groups[group_name]
+            right_group_ids = right_joint_groups[group_name]
+            if len(left_group_ids) > 0 and len(right_group_ids) > 0:
+                left_default_group = agibot.data.default_joint_pos[:, left_group_ids]
+                right_default_group = agibot.data.default_joint_pos[:, right_group_ids]
+                cached_symmetric_refs[group_name] = (left_default_group + right_default_group) / 2.0
+        cached_symmetric_ref_all = (agibot.data.default_joint_pos[:, all_left_ids] + agibot.data.default_joint_pos[:, all_right_ids]) / 2.0
     else:
         left_joint_groups = {}
         right_joint_groups = {}
+        cached_symmetric_refs = {}
+        cached_symmetric_ref_all = None
+        all_left_ids = torch.tensor([], device=agibot.device, dtype=torch.long)
+        all_right_ids = torch.tensor([], device=agibot.device, dtype=torch.long)
         print("[WARN] No arm joints found for animation. Robot will use default pose.")
 
     # Setup door2 mesh transform animation
@@ -351,6 +377,16 @@ def main():
 
     print("[INFO] Done. Close the window to exit.")
     while simulation_app.is_running():
+        # Reset robot to default positions at the start of each period to maintain symmetry
+        if count % period == 0:
+            # Reset joint positions to default
+            agibot.write_joint_state_to_sim(
+                agibot.data.default_joint_pos.clone(),
+                agibot.data.default_joint_vel.clone()
+            )
+            agibot.reset()
+            count = 0
+        
         # Calculate phase for animations
         phase = count % period
         alpha = phase / max(1, period - 1)  # Normalized phase [0, 1]
@@ -372,7 +408,9 @@ def main():
         # Update robot pose using phase-based animation (with sequential linkage movement)
         set_robot_pose_demo(
             agibot, alpha, left_joint_groups, right_joint_groups, robot_animation_range, 
-            sequential=not args_cli.simultaneous_arms, sequential_linkages=True
+            sequential=not args_cli.simultaneous_arms, sequential_linkages=True,
+            cached_symmetric_refs=cached_symmetric_refs,
+            cached_symmetric_ref_all=cached_symmetric_ref_all
         )
 
         if count % 20 == 0:
