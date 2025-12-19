@@ -11,8 +11,9 @@ from isaaclab.app import AppLauncher
 parser = argparse.ArgumentParser(
     description="This script demonstrates adding a custom elevator to an Isaac Lab environment."
 )
-parser.add_argument("--robot", type=str, default="agibot", help="Name of the robot.")
 parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
+parser.add_argument("--robot_animation_range", type=float, default=0.1, help="Range of robot arm animation (0.0-1.0, where 1.0 = full 2π rotation)")
+parser.add_argument("--simultaneous_arms", action="store_true", help="Move both arms simultaneously. If not set, arms move sequentially (left first, then right)")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -26,26 +27,18 @@ import torch
 
 import isaaclab.sim as sim_utils
 # import prims as prim_utils
-from isaaclab.assets import AssetBaseCfg, Articulation
-from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
-from isaaclab.managers import SceneEntityCfg
-from isaaclab.markers import VisualizationMarkers
-from isaaclab.markers.config import FRAME_MARKER_CFG
+from isaaclab.assets import AssetBaseCfg, ArticulationCfg, Articulation
+from isaaclab.sim import SimulationContext
 from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.utils import configclass
-from isaaclab.utils.math import subtract_frame_transforms
 
-##
-# Pre-defined configs
-##
-from cfg.agibot import AGIBOT_A2D_CFG  # isort:skip
-from cfg.elevator import ELEVATOR_CFG  # isort:skip
+from cfg.agibot import AGIBOT_A2D_CFG
 
-# -----------------------------------------------------------------------------
-# Scene config
-# -----------------------------------------------------------------------------
+# NEW: USD access
+import omni.usd
+from pxr import UsdGeom, Gf, Usd
+
 ELEVATOR_ASSET_PATH = "ElevatorManAssets/assets/Collected_elevator_asset_tmp/elevator_asset.usdc"
-
 
 @configclass
 class ElevatorSceneCfg(InteractiveSceneCfg):
@@ -53,7 +46,7 @@ class ElevatorSceneCfg(InteractiveSceneCfg):
     ground = AssetBaseCfg(
         prim_path="/World/defaultGroundPlane",
         spawn=sim_utils.GroundPlaneCfg(),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -1.05)),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0)),
     )
 
     dome_light = AssetBaseCfg(
@@ -61,169 +54,374 @@ class ElevatorSceneCfg(InteractiveSceneCfg):
         spawn=sim_utils.DomeLightCfg(intensity=3000.0),
     )
 
-    elevator = ELEVATOR_CFG.replace(prim_path="/World/Elevator/root")
-
-    robot = AGIBOT_A2D_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
-
-
-# -----------------------------------------------------------------------------
-# Simulator loop
-# -----------------------------------------------------------------------------
-def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
-
-    robot = scene["robot"]
-    device = robot.device
-
-    # ---------------- IK controllers ----------------
-    ik_cfg = DifferentialIKControllerCfg(
-        command_type="pose",
-        use_relative_mode=False,
-        ik_method="dls",
+    # elevator
+    elevator = AssetBaseCfg(
+        prim_path="/World/Elevator/root",
+        spawn=sim_utils.UsdFileCfg(
+            usd_path=ELEVATOR_ASSET_PATH
+        ),
     )
 
-    left_ik = DifferentialIKController(ik_cfg, scene.num_envs, device)
-    right_ik = DifferentialIKController(ik_cfg, scene.num_envs, device)
+    # robot
+    agibot: ArticulationCfg = AGIBOT_A2D_CFG.replace(prim_path="/World/Agibot")
 
-    # ---------------- Scene entities ----------------
-    left_cfg = SceneEntityCfg(
-        "robot",
-        joint_names=["left_arm_joint[1-7]"],
-        body_names=["Link6_l"],
+def set_articulation_joints_by_name(
+    art: Articulation,
+    joint_targets: dict[str, float],
+    env_ids: torch.Tensor | None = None,
+):
+    """Directly overwrite joint positions (q) in the simulator for selected joints.
+
+    joint_targets: {"joint_name": target_position_in_radians_or_meters, ...}
+    """
+    if env_ids is None:
+        env_ids = torch.arange(art.num_envs, device=art.device)
+
+    # Resolve joint indices
+    joint_names = list(joint_targets.keys())
+    joint_ids, _ = art.find_joints(joint_names)
+    if len(joint_ids) != len(joint_names):
+        missing = set(joint_names) - set([art.joint_names[i] for i in joint_ids])
+        raise RuntimeError(f"Some joints were not found: {missing}")
+
+    # Read current full joint state
+    q = art.data.joint_pos.clone()
+    qd = art.data.joint_vel.clone()
+
+    # Overwrite only the selected joints for selected envs
+    target_vals = torch.tensor(
+        [joint_targets[n] for n in joint_names],
+        device=art.device,
+        dtype=q.dtype,
     )
-    right_cfg = SceneEntityCfg(
-        "robot",
-        joint_names=["right_arm_joint[1-7]"],
-        body_names=["Link6_r"],
-    )
+    q[env_ids[:, None], joint_ids[None, :]] = target_vals[None, :]
+    qd[env_ids[:, None], joint_ids[None, :]] = 0.0
 
-    left_cfg.resolve(scene)
-    right_cfg.resolve(scene)
+    # Write back to simulator immediately (this is the "no simulation" teleport)
+    art.write_joint_state_to_sim(q, qd, env_ids=env_ids)
 
-    if robot.is_fixed_base:
-        left_ee_jac = left_cfg.body_ids[0] - 1
-        right_ee_jac = right_cfg.body_ids[0] - 1
+def set_robot_pose_demo(
+    agibot: Articulation, 
+    phase: float, 
+    left_joint_groups: dict[str, torch.Tensor],
+    right_joint_groups: dict[str, torch.Tensor],
+    robot_animation_range: float = 1.0,
+    symmetric_base: bool = True,
+    sequential: bool = True,
+    sequential_linkages: bool = True,
+    cached_symmetric_refs: dict[str, torch.Tensor] = None,
+    cached_symmetric_ref_all: torch.Tensor = None
+):
+    """Set robot joints based on phase for smooth animation.
+    
+    Args:
+        agibot: The robot articulation
+        phase: Normalized phase value [0, 1] for animation cycle
+        left_joint_groups: Dict mapping group names to tensors of left arm joint indices (e.g., {"shoulder": [...], "forearm": [...], "gripper": [...]})
+        right_joint_groups: Dict mapping group names to tensors of right arm joint indices
+        robot_animation_range: Multiplier for animation range (default 1.0 = full 2π rotation)
+        symmetric_base: If True, ensures symmetric starting positions for left and right arms
+        sequential: If True, moves arms one at a time (left first, then right). If False, moves both simultaneously.
+        sequential_linkages: If True, animates joint groups (shoulder, forearm, gripper) sequentially within each arm
+    """
+    # Get all joint IDs from groups for checking
+    all_left_ids = torch.cat([ids for ids in left_joint_groups.values()]) if left_joint_groups else torch.tensor([], dtype=torch.long, device=agibot.device)
+    all_right_ids = torch.cat([ids for ids in right_joint_groups.values()]) if right_joint_groups else torch.tensor([], dtype=torch.long, device=agibot.device)
+    
+    if len(all_left_ids) == 0 and len(all_right_ids) == 0:
+        return
+    
+    # Calculate joint positions based on phase (smooth rotation)
+    joint_pos_target = agibot.data.default_joint_pos.clone()
+    
+    # Get group names in order (shoulder, forearm, gripper)
+    group_names = list(left_joint_groups.keys()) if left_joint_groups else list(right_joint_groups.keys())
+    num_groups = len(group_names)
+    
+    def animate_joint_group(group_ids, group_phase, symmetric_ref_group=None, is_left=True):
+        """Helper to animate a joint group based on phase"""
+        if len(group_ids) == 0:
+            return
+
+        animation_offset = group_phase * (2 * torch.pi * robot_animation_range)
+        if symmetric_ref_group is not None:
+            if is_left:
+                joint_pos_target[:, group_ids] = symmetric_ref_group + animation_offset
+            else:
+                joint_pos_target[:, group_ids] = symmetric_ref_group - animation_offset
+        else:
+            if is_left:
+                joint_pos_target[:, group_ids] += animation_offset
+            else:
+                joint_pos_target[:, group_ids] -= animation_offset
+    
+    if symmetric_base and len(all_left_ids) > 0 and len(all_right_ids) > 0:
+        # For symmetric motion: use average of left/right defaults as symmetric reference
+        # Use cached references if provided, otherwise compute them
+        if cached_symmetric_refs is not None and cached_symmetric_ref_all is not None:
+            symmetric_refs = cached_symmetric_refs
+            symmetric_ref_all = cached_symmetric_ref_all
+        else:
+            # Compute symmetric ref for each group separately
+            symmetric_refs = {}
+            for group_name in group_names:
+                left_group_ids = left_joint_groups[group_name]
+                right_group_ids = right_joint_groups[group_name]
+                if len(left_group_ids) > 0 and len(right_group_ids) > 0:
+                    left_default_group = agibot.data.default_joint_pos[:, left_group_ids]
+                    right_default_group = agibot.data.default_joint_pos[:, right_group_ids]
+                    symmetric_refs[group_name] = (left_default_group + right_default_group) / 2.0
+            
+            # Also compute for all joints together (for non-sequential-linkages case)
+            left_default_all = agibot.data.default_joint_pos[:, all_left_ids]
+            right_default_all = agibot.data.default_joint_pos[:, all_right_ids]
+            symmetric_ref_all = (left_default_all + right_default_all) / 2.0
+        
+        if sequential:
+            # Sequential movement: left arm moves first (phase 0-0.5), then right arm (phase 0.5-1.0)
+            if phase < 0.5:
+                left_phase = phase * 2.0  # Map [0, 0.5] to [0, 1]
+                
+                if sequential_linkages and num_groups > 0:
+                    # Animate left arm groups sequentially
+                    group_phase_range = 1.0 / num_groups
+                    for i, group_name in enumerate(group_names):
+                        group_start = i * group_phase_range
+                        group_end = (i + 1) * group_phase_range
+                        if left_phase >= group_end:
+                            # This group is complete, set to final position
+                            animate_joint_group(left_joint_groups[group_name], 1.0, symmetric_refs[group_name], is_left=True)
+                        elif left_phase >= group_start:
+                            # This group is currently animating
+                            group_phase = (left_phase - group_start) / group_phase_range
+                            animate_joint_group(left_joint_groups[group_name], group_phase, symmetric_refs[group_name], is_left=True)
+                        else:
+                            # This group hasn't started yet, keep at reference position
+                            joint_pos_target[:, left_joint_groups[group_name]] = symmetric_refs[group_name]
+                    
+                    # Right arm stays at reference
+                    for group_name in group_names:
+                        joint_pos_target[:, right_joint_groups[group_name]] = symmetric_refs[group_name]
+                else:
+                    # Animate all left joints together
+                    animation_offset = left_phase * (2 * torch.pi * robot_animation_range)
+                    joint_pos_target[:, all_left_ids] = symmetric_ref_all + animation_offset
+                    joint_pos_target[:, all_right_ids] = symmetric_ref_all
+            else:
+                right_phase = (phase - 0.5) * 2.0  # Map [0.5, 1.0] to [0, 1]
+                
+                # Left arm at final position
+                left_final_offset = (2 * torch.pi * robot_animation_range)
+                joint_pos_target[:, all_left_ids] = symmetric_ref_all + left_final_offset
+                
+                if sequential_linkages and num_groups > 0:
+                    # Animate right arm groups sequentially
+                    group_phase_range = 1.0 / num_groups
+                    for i, group_name in enumerate(group_names):
+                        group_start = i * group_phase_range
+                        group_end = (i + 1) * group_phase_range
+                        if right_phase >= group_end:
+                            # This group is complete, set to final position
+                            animate_joint_group(right_joint_groups[group_name], 1.0, symmetric_refs[group_name], is_left=False)
+                        elif right_phase >= group_start:
+                            # This group is currently animating
+                            group_phase = (right_phase - group_start) / group_phase_range
+                            animate_joint_group(right_joint_groups[group_name], group_phase, symmetric_refs[group_name], is_left=False)
+                        else:
+                            # This group hasn't started yet, keep at reference position
+                            joint_pos_target[:, right_joint_groups[group_name]] = symmetric_refs[group_name]
+                else:
+                    # Animate all right joints together
+                    animation_offset = right_phase * (2 * torch.pi * robot_animation_range)
+                    joint_pos_target[:, all_right_ids] = symmetric_ref_all - animation_offset
+        else:
+            # Simultaneous movement: both arms move together
+            if sequential_linkages and num_groups > 0:
+                group_phase_range = 1.0 / num_groups
+                for i, group_name in enumerate(group_names):
+                    group_start = i * group_phase_range
+                    group_end = (i + 1) * group_phase_range
+                    if phase >= group_end:
+                        # This group is complete, set to final position
+                        animate_joint_group(left_joint_groups[group_name], 1.0, symmetric_refs[group_name], is_left=True)
+                        animate_joint_group(right_joint_groups[group_name], 1.0, symmetric_refs[group_name], is_left=False)
+                    elif phase >= group_start:
+                        # This group is currently animating
+                        group_phase = (phase - group_start) / group_phase_range
+                        animate_joint_group(left_joint_groups[group_name], group_phase, symmetric_refs[group_name], is_left=True)
+                        animate_joint_group(right_joint_groups[group_name], group_phase, symmetric_refs[group_name], is_left=False)
+                    else:
+                        # This group hasn't started yet, keep at reference position
+                        joint_pos_target[:, left_joint_groups[group_name]] = symmetric_refs[group_name]
+                        joint_pos_target[:, right_joint_groups[group_name]] = symmetric_refs[group_name]
+            else:
+                animation_offset = phase * (2 * torch.pi * robot_animation_range)
+                joint_pos_target[:, all_left_ids] = symmetric_ref_all + animation_offset
+                joint_pos_target[:, all_right_ids] = symmetric_ref_all - animation_offset
     else:
-        left_ee_jac = left_cfg.body_ids[0]
-        right_ee_jac = right_cfg.body_ids[0]
+        # Non-symmetric base - simplified version (can be expanded if needed)
+        animation_offset = phase * (2 * torch.pi * robot_animation_range) if not sequential else (phase * 2.0 if phase < 0.5 else (phase - 0.5) * 2.0) * (2 * torch.pi * robot_animation_range)
+        if len(all_left_ids) > 0:
+            joint_pos_target[:, all_left_ids] += animation_offset if phase < 0.5 or not sequential else (2 * torch.pi * robot_animation_range)
+        if len(all_right_ids) > 0:
+            joint_pos_target[:, all_right_ids] -= animation_offset if phase >= 0.5 or not sequential else 0
+    
+    # Clamp to joint limits
+    joint_pos_target = joint_pos_target.clamp_(
+        agibot.data.soft_joint_pos_limits[..., 0], 
+        agibot.data.soft_joint_pos_limits[..., 1]
+    )
+    agibot.set_joint_position_target(joint_pos_target)
+    agibot.write_data_to_sim()
 
-    # ---------------- Markers ----------------
-    frame_cfg = FRAME_MARKER_CFG.copy()
-    frame_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)
-
-    left_ee_marker = VisualizationMarkers(frame_cfg.replace(prim_path="/Visuals/left_ee"))
-    right_ee_marker = VisualizationMarkers(frame_cfg.replace(prim_path="/Visuals/right_ee"))
-    left_goal_marker = VisualizationMarkers(frame_cfg.replace(prim_path="/Visuals/left_goal"))
-    right_goal_marker = VisualizationMarkers(frame_cfg.replace(prim_path="/Visuals/right_goal"))
-
-    # ---------------- Goals ----------------
-    left_arm_goals = torch.tensor([
-        [0.25,  0.22, 0.18, 0.0, 0.7071, 0.0, 0.7071],
-        [0.30,  0.20, 0.26, 0.0, 0.7071, 0.0, 0.7071],
-        [0.25,  0.18, 0.34, 0.0, 0.7071, 0.0, 0.7071],
-    ], device=device)
-
-    right_arm_goals = torch.tensor([
-        [0.25, -0.22, 0.18, 0.0, 0.7071, 0.0, 0.7071],
-        [0.30, -0.20, 0.26, 0.0, 0.7071, 0.0, 0.7071],
-        [0.25, -0.18, 0.34, 0.0, 0.7071, 0.0, 0.7071],
-    ], device=device)
-
-    left_cmd = torch.zeros(scene.num_envs, 7, device=device)
-    right_cmd = torch.zeros(scene.num_envs, 7, device=device)
-
-    # ---------------- Timing ----------------
-    sim_dt = sim.get_physics_dt()
-    period = 150
-    count = 0
-    goal_idx = 0
-
-    # ---------------- Loop ----------------
-    while simulation_app.is_running():
-
-        if count % period == 0:
-            count = 0
-
-            robot.write_joint_state_to_sim(
-                robot.data.default_joint_pos,
-                robot.data.default_joint_vel,
-            )
-            robot.reset()
-
-            goal_idx = (goal_idx + 1) % left_arm_goals.shape[0]
-            left_cmd[:] = left_arm_goals[goal_idx]
-            right_cmd[:] = right_arm_goals[goal_idx]
-
-            left_ik.reset()
-            left_ik.set_command(left_cmd)
-
-            right_ik.reset()
-            right_ik.set_command(right_cmd)
-
-            print("[INFO]: Resetting state...")
-
-        # ---------------- Left arm IK ----------------
-        root_w = robot.data.root_pose_w
-
-        left_ee_w = robot.data.body_pose_w[:, left_cfg.body_ids[0]]
-        left_jac = robot.root_physx_view.get_jacobians()[:, left_ee_jac, :, left_cfg.joint_ids]
-        left_q = robot.data.joint_pos[:, left_cfg.joint_ids]
-
-        left_pos_b, left_quat_b = subtract_frame_transforms(
-            root_w[:, :3], root_w[:, 3:7],
-            left_ee_w[:, :3], left_ee_w[:, 3:7],
-        )
-
-        left_q_des = left_ik.compute(left_pos_b, left_quat_b, left_jac, left_q)
-
-        # ---------------- Right arm IK ----------------
-        right_ee_w = robot.data.body_pose_w[:, right_cfg.body_ids[0]]
-        right_jac = robot.root_physx_view.get_jacobians()[:, right_ee_jac, :, right_cfg.joint_ids]
-        right_q = robot.data.joint_pos[:, right_cfg.joint_ids]
-
-        right_pos_b, right_quat_b = subtract_frame_transforms(
-            root_w[:, :3], root_w[:, 3:7],
-            right_ee_w[:, :3], right_ee_w[:, 3:7],
-        )
-
-        right_q_des = right_ik.compute(right_pos_b, right_quat_b, right_jac, right_q)
-
-        # ---------------- Apply ----------------
-        robot.set_joint_position_target(left_q_des, left_cfg.joint_ids)
-        robot.set_joint_position_target(right_q_des, right_cfg.joint_ids)
-
-        scene.write_data_to_sim()
-        sim.step()
-        scene.update(sim_dt)
-        count += 1
-
-        # ---------------- Visuals ----------------
-        left_ee_marker.visualize(left_ee_w[:, :3], left_ee_w[:, 3:7])
-        right_ee_marker.visualize(right_ee_w[:, :3], right_ee_w[:, 3:7])
-        left_goal_marker.visualize(left_cmd[:, :3] + scene.env_origins, left_cmd[:, 3:7])
-        right_goal_marker.visualize(right_cmd[:, :3] + scene.env_origins, right_cmd[:, 3:7])
-
-
-# -----------------------------------------------------------------------------
-# Main
-# -----------------------------------------------------------------------------
 def main():
-    """Main function."""
-    # Load kit helper
     sim_cfg = sim_utils.SimulationCfg(device=args_cli.device)
     sim = sim_utils.SimulationContext(sim_cfg)
-    # Set main camera
-    sim.set_camera_view([2.5, 0.0, 4.0], [0.0, 0.0, 2.0])
-    # Design scene
-    scene_cfg = ElevatorSceneCfg(num_envs=args_cli.num_envs, env_spacing=2.0)
+
+    sim.set_camera_view([3.5, 0.0, 3.2], [0.0, 0.0, 0.5])
+
+    scene_cfg = ElevatorSceneCfg(num_envs=args_cli.num_envs, env_spacing=0.0)
     scene = InteractiveScene(scene_cfg)
-    # Play the simulator
+
     sim.reset()
-    # Now we are ready!
-    print("[INFO]: Setup complete...")
-    # Run the simulator
-    run_simulator(sim, scene)
+
+    # Access the robot articulation (because we used ArticulationCfg)
+    agibot: Articulation = scene["agibot"]
+
+    # Setup robot joint animation - organize into groups: shoulder (1-3), forearm (4-5), gripper (6-7)
+    left_shoulder_names = ["left_arm_joint1", "left_arm_joint2", "left_arm_joint3"]
+    left_forearm_names = ["left_arm_joint4", "left_arm_joint5"]
+    left_gripper_names = ["left_arm_joint6", "left_arm_joint7"]
+    
+    right_shoulder_names = ["right_arm_joint1", "right_arm_joint2", "right_arm_joint3"]
+    right_forearm_names = ["right_arm_joint4", "right_arm_joint5"]
+    right_gripper_names = ["right_arm_joint6", "right_arm_joint7"]
+    
+    # Find joint indices for each group
+    left_shoulder_ids, _ = agibot.find_joints(left_shoulder_names)
+    left_forearm_ids, _ = agibot.find_joints(left_forearm_names)
+    left_gripper_ids, _ = agibot.find_joints(left_gripper_names)
+    
+    right_shoulder_ids, _ = agibot.find_joints(right_shoulder_names)
+    right_forearm_ids, _ = agibot.find_joints(right_forearm_names)
+    right_gripper_ids, _ = agibot.find_joints(right_gripper_names)
+    
+    # Organize into groups
+    left_joint_groups = {
+        "shoulder": torch.as_tensor(left_shoulder_ids, device=agibot.device, dtype=torch.long),
+        "forearm": torch.as_tensor(left_forearm_ids, device=agibot.device, dtype=torch.long),
+        "gripper": torch.as_tensor(left_gripper_ids, device=agibot.device, dtype=torch.long),
+    }
+    right_joint_groups = {
+        "shoulder": torch.as_tensor(right_shoulder_ids, device=agibot.device, dtype=torch.long),
+        "forearm": torch.as_tensor(right_forearm_ids, device=agibot.device, dtype=torch.long),
+        "gripper": torch.as_tensor(right_gripper_ids, device=agibot.device, dtype=torch.long),
+    }
+    
+    total_left = sum(len(ids) for ids in left_joint_groups.values())
+    total_right = sum(len(ids) for ids in right_joint_groups.values())
+    
+    if total_left > 0 or total_right > 0:
+        print(f"[INFO] Organized arm joints into groups:")
+        print(f"  Left arm - Shoulder: {len(left_joint_groups['shoulder'])}, Forearm: {len(left_joint_groups['forearm'])}, Gripper: {len(left_joint_groups['gripper'])}")
+        print(f"  Right arm - Shoulder: {len(right_joint_groups['shoulder'])}, Forearm: {len(right_joint_groups['forearm'])}, Gripper: {len(right_joint_groups['gripper'])}")
+        
+        # Debug: Check default positions for symmetry
+        scene.update(sim.get_physics_dt())  # Ensure data is updated
+        
+        # Cache symmetric reference positions once (computed from default positions)
+        # This ensures consistent symmetry across all animation cycles
+        group_names = list(left_joint_groups.keys())
+        cached_symmetric_refs = {}
+        all_left_ids = torch.cat([ids for ids in left_joint_groups.values()])
+        all_right_ids = torch.cat([ids for ids in right_joint_groups.values()])
+        for group_name in group_names:
+            left_group_ids = left_joint_groups[group_name]
+            right_group_ids = right_joint_groups[group_name]
+            if len(left_group_ids) > 0 and len(right_group_ids) > 0:
+                left_default_group = agibot.data.default_joint_pos[:, left_group_ids]
+                right_default_group = agibot.data.default_joint_pos[:, right_group_ids]
+                cached_symmetric_refs[group_name] = (left_default_group + right_default_group) / 2.0
+        cached_symmetric_ref_all = (agibot.data.default_joint_pos[:, all_left_ids] + agibot.data.default_joint_pos[:, all_right_ids]) / 2.0
+    else:
+        left_joint_groups = {}
+        right_joint_groups = {}
+        cached_symmetric_refs = {}
+        cached_symmetric_ref_all = None
+        all_left_ids = torch.tensor([], device=agibot.device, dtype=torch.long)
+        all_right_ids = torch.tensor([], device=agibot.device, dtype=torch.long)
+        print("[WARN] No arm joints found for animation. Robot will use default pose.")
+
+    # Setup door2 mesh transform animation
+    DOOR2_PRIM_PATH = "/World/Elevator/root/Elevator/ElevatorRig/Door2/Cube_025"
+    stage = omni.usd.get_context().get_stage()
+    door2_prim = stage.GetPrimAtPath(DOOR2_PRIM_PATH)
+    
+    if not door2_prim.IsValid():
+        raise RuntimeError(f"Door2 prim not found at: {DOOR2_PRIM_PATH}")
+
+    door2_xform = UsdGeom.XformCommonAPI(door2_prim)
+
+    # Cache initial transform (we'll only offset translation)
+    tc = Usd.TimeCode.Default()
+    init_t, init_r, init_s, init_pivot, _ = door2_xform.GetXformVectors(tc)
+    init_t = Gf.Vec3d(init_t)  # make sure it's a Vec3d
+    print("[INFO] Door2 initial translate:", init_t)
+
+    # Animation parameters
+    count = 0
+    period = 500
+    open_delta = -0.5  # 5 cm along chosen axis
+    close_delta = 0.0
+    robot_animation_range = args_cli.robot_animation_range
+
+    print("[INFO] Done. Close the window to exit.")
+    while simulation_app.is_running():
+        # Reset robot to default positions at the start of each period to maintain symmetry
+        if count % period == 0:
+            # Reset joint positions to default
+            agibot.write_joint_state_to_sim(
+                agibot.data.default_joint_pos.clone(),
+                agibot.data.default_joint_vel.clone()
+            )
+            agibot.reset()
+            count = 0
+        
+        # Calculate phase for animations
+        phase = count % period
+        alpha = phase / max(1, period - 1)  # Normalized phase [0, 1]
+        
+        # Calculate door animation delta based on phase
+        if phase < 100:        # opening
+            t = phase / 99.0
+            delta = close_delta + t * (open_delta - close_delta)
+        elif phase < 400:      # hold open
+            delta = open_delta
+        else:                  # closing
+            t = (phase - 400) / 99.0
+            delta = open_delta + t * (close_delta - open_delta)
+
+        # Update door position
+        new_t = Gf.Vec3d(init_t[0] + delta, init_t[1], init_t[2])
+        door2_xform.SetTranslate(new_t, Usd.TimeCode.Default())
+
+        # Update robot pose using phase-based animation (with sequential linkage movement)
+        set_robot_pose_demo(
+            agibot, alpha, left_joint_groups, right_joint_groups, robot_animation_range, 
+            sequential=not args_cli.simultaneous_arms, sequential_linkages=True,
+            cached_symmetric_refs=cached_symmetric_refs,
+            cached_symmetric_ref_all=cached_symmetric_ref_all
+        )
+
+        if count % 20 == 0:
+            print(f"[door2-mesh] delta={delta:+.4f} translate={new_t}")
+
+        sim.step()
+        scene.update(sim.get_physics_dt())
+        count += 1
+
+    simulation_app.close()
 
 
 if __name__ == "__main__":
     main()
-    simulation_app.close()
