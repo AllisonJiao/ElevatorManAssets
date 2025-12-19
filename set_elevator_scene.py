@@ -131,17 +131,17 @@ def set_robot_pose_demo(
         right_default = agibot.data.default_joint_pos[:, right_joint_ids]
         symmetric_ref = (left_default + right_default) / 2.0
         
-        # Apply symmetric animation: left moves negative, right moves positive from reference
-        joint_pos_target[:, left_joint_ids] = symmetric_ref - animation_offset
-        joint_pos_target[:, right_joint_ids] = symmetric_ref + animation_offset
+        # Apply symmetric animation: left moves positive, right moves negative from reference (forward motion)
+        joint_pos_target[:, left_joint_ids] = symmetric_ref + animation_offset
+        joint_pos_target[:, right_joint_ids] = symmetric_ref - animation_offset
     else:
-        # Apply animation to left joints (negative direction)
+        # Apply animation to left joints (positive direction - forward)
         if len(left_joint_ids) > 0:
-            joint_pos_target[:, left_joint_ids] -= animation_offset
+            joint_pos_target[:, left_joint_ids] += animation_offset
         
-        # Apply animation to right joints (positive direction)
+        # Apply animation to right joints (negative direction - forward)
         if len(right_joint_ids) > 0:
-            joint_pos_target[:, right_joint_ids] += animation_offset
+            joint_pos_target[:, right_joint_ids] -= animation_offset
     
     # Clamp to joint limits
     joint_pos_target = joint_pos_target.clamp_(
