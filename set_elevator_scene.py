@@ -13,6 +13,7 @@ parser = argparse.ArgumentParser(
 )
 parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
 parser.add_argument("--robot_animation_range", type=float, default=0.1, help="Range of robot arm animation (0.0-1.0, where 1.0 = full 2π rotation)")
+parser.add_argument("--simultaneous_arms", action="store_true", help="Move both arms simultaneously. If not set, arms move sequentially (left first, then right)")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -105,17 +106,19 @@ def set_robot_pose_demo(
     left_joint_ids: torch.Tensor,
     right_joint_ids: torch.Tensor,
     robot_animation_range: float = 1.0,
-    symmetric_base: bool = True
+    symmetric_base: bool = True,
+    sequential: bool = True
 ):
     """Set robot joints based on phase for smooth animation.
     
     Args:
         agibot: The robot articulation
         phase: Normalized phase value [0, 1] for animation cycle
-        left_joint_ids: Tensor of left arm joint indices to animate (rotates opposite direction)
+        left_joint_ids: Tensor of left arm joint indices to animate
         right_joint_ids: Tensor of right arm joint indices to animate
         robot_animation_range: Multiplier for animation range (default 1.0 = full 2π rotation)
         symmetric_base: If True, ensures symmetric starting positions for left and right arms
+        sequential: If True, moves arms one at a time (left first, then right). If False, moves both simultaneously.
     """
     if len(left_joint_ids) == 0 and len(right_joint_ids) == 0:
         return
@@ -123,26 +126,56 @@ def set_robot_pose_demo(
     # Calculate joint positions based on phase (smooth rotation)
     joint_pos_target = agibot.data.default_joint_pos.clone()
     
-    # Calculate animation offset
-    animation_offset = phase * (2 * torch.pi * robot_animation_range)
-    
     if symmetric_base and len(left_joint_ids) == len(right_joint_ids) and len(left_joint_ids) > 0:
         # For symmetric motion: use average of left/right defaults as symmetric reference
         left_default = agibot.data.default_joint_pos[:, left_joint_ids]
         right_default = agibot.data.default_joint_pos[:, right_joint_ids]
         symmetric_ref = (left_default + right_default) / 2.0
         
-        # Apply symmetric animation: left moves positive, right moves negative from reference (forward motion)
-        joint_pos_target[:, left_joint_ids] = symmetric_ref + animation_offset
-        joint_pos_target[:, right_joint_ids] = symmetric_ref - animation_offset
+        if sequential:
+            # Sequential movement: left arm moves first (phase 0-0.5), then right arm (phase 0.5-1.0)
+            if phase < 0.5:
+                # First half: left arm animates forward, right arm stays at symmetric reference
+                left_phase = phase * 2.0  # Map [0, 0.5] to [0, 1]
+                animation_offset = left_phase * (2 * torch.pi * robot_animation_range)
+                joint_pos_target[:, left_joint_ids] = symmetric_ref + animation_offset
+                joint_pos_target[:, right_joint_ids] = symmetric_ref  # Right stays at symmetric reference
+            else:
+                # Second half: right arm animates forward, left arm stays at its final position
+                right_phase = (phase - 0.5) * 2.0  # Map [0.5, 1.0] to [0, 1]
+                animation_offset = right_phase * (2 * torch.pi * robot_animation_range)
+                left_final_offset = (2 * torch.pi * robot_animation_range)  # Left at final position
+                joint_pos_target[:, left_joint_ids] = symmetric_ref + left_final_offset
+                joint_pos_target[:, right_joint_ids] = symmetric_ref - animation_offset
+        else:
+            # Simultaneous movement: both arms move together
+            animation_offset = phase * (2 * torch.pi * robot_animation_range)
+            joint_pos_target[:, left_joint_ids] = symmetric_ref + animation_offset
+            joint_pos_target[:, right_joint_ids] = symmetric_ref - animation_offset
     else:
-        # Apply animation to left joints (positive direction - forward)
-        if len(left_joint_ids) > 0:
-            joint_pos_target[:, left_joint_ids] += animation_offset
-        
-        # Apply animation to right joints (negative direction - forward)
-        if len(right_joint_ids) > 0:
-            joint_pos_target[:, right_joint_ids] -= animation_offset
+        if sequential:
+            # Sequential movement without symmetric base
+            if phase < 0.5:
+                # First half: left arm animates
+                left_phase = phase * 2.0
+                animation_offset = left_phase * (2 * torch.pi * robot_animation_range)
+                if len(left_joint_ids) > 0:
+                    joint_pos_target[:, left_joint_ids] += animation_offset
+            else:
+                # Second half: right arm animates
+                right_phase = (phase - 0.5) * 2.0
+                animation_offset = right_phase * (2 * torch.pi * robot_animation_range)
+                if len(left_joint_ids) > 0:
+                    joint_pos_target[:, left_joint_ids] += (2 * torch.pi * robot_animation_range)  # Left at final
+                if len(right_joint_ids) > 0:
+                    joint_pos_target[:, right_joint_ids] -= animation_offset
+        else:
+            # Simultaneous movement
+            animation_offset = phase * (2 * torch.pi * robot_animation_range)
+            if len(left_joint_ids) > 0:
+                joint_pos_target[:, left_joint_ids] += animation_offset
+            if len(right_joint_ids) > 0:
+                joint_pos_target[:, right_joint_ids] -= animation_offset
     
     # Clamp to joint limits
     joint_pos_target = joint_pos_target.clamp_(
@@ -239,8 +272,8 @@ def main():
         new_t = Gf.Vec3d(init_t[0] + delta, init_t[1], init_t[2])
         door2_xform.SetTranslate(new_t, Usd.TimeCode.Default())
 
-        # Update robot pose using phase-based animation (left and right together)
-        set_robot_pose_demo(agibot, alpha, left_joint_ids, right_joint_ids, robot_animation_range)
+        # Update robot pose using phase-based animation
+        set_robot_pose_demo(agibot, alpha, left_joint_ids, right_joint_ids, robot_animation_range, sequential=not args_cli.simultaneous_arms)
 
         if count % 20 == 0:
             print(f"[door2-mesh] delta={delta:+.4f} translate={new_t}")
