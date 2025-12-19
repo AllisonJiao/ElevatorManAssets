@@ -167,10 +167,10 @@ def main():
 
     # Setup robot joint animation - find left and right arm joints
     left_joint_names = [
-        "left_arm_joint[1-3]"
+        "left_arm_joint[1-7]"
     ]
     right_joint_names = [
-        "right_arm_joint[1-3]"
+        "right_arm_joint[1-7]"
     ]
     
     left_joint_ids, _ = agibot.find_joints(left_joint_names)
@@ -216,7 +216,7 @@ def main():
     period = 500
     open_delta = -0.5  # 5 cm along chosen axis
     close_delta = 0.0
-    robot_animation_range = 0.5  # Reduce this value to make robot animation smaller (0.5 = half range, 1.0 = full 2π)
+    robot_animation_range = 0.1  # Reduce this value to make robot animation smaller (0.5 = half range, 1.0 = full 2π)
 
     print("[INFO] Done. Close the window to exit.")
     while simulation_app.is_running():
