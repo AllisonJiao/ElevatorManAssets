@@ -139,7 +139,7 @@ def set_robot_pose_demo(
     def animate_joint_group(group_ids, group_phase, symmetric_ref_group=None, is_left=True):
         """Helper to animate a joint group based on phase"""
         if len(group_ids) == 0:
-        return
+            return
 
         animation_offset = group_phase * (2 * torch.pi * robot_animation_range)
         if symmetric_ref_group is not None:
