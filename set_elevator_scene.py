@@ -98,20 +98,21 @@ def set_articulation_joints_by_name(
     # Write back to simulator immediately (this is the "no simulation" teleport)
     art.write_joint_state_to_sim(q, qd, env_ids=env_ids)
 
-def set_robot_pose_demo(agibot: Articulation, phase: float, animate_joint_ids: torch.Tensor):
+def set_robot_pose_demo(agibot: Articulation, phase: float, animate_joint_ids: torch.Tensor, animation_range: float = 1.0):
     """Set robot joints based on phase for smooth animation.
     
     Args:
         agibot: The robot articulation
         phase: Normalized phase value [0, 1] for animation cycle
         animate_joint_ids: Tensor of joint indices to animate
+        animation_range: Multiplier for animation range (default 1.0 = full 2π rotation)
     """
     if len(animate_joint_ids) == 0:
         return
     
     # Calculate joint positions based on phase (smooth rotation)
     joint_pos_target = agibot.data.default_joint_pos.clone()
-    joint_pos_target[:, animate_joint_ids] += phase * (2 * torch.pi)
+    joint_pos_target[:, animate_joint_ids] += phase * (2 * torch.pi * animation_range)
     joint_pos_target = joint_pos_target.clamp_(
         agibot.data.soft_joint_pos_limits[..., 0], 
         agibot.data.soft_joint_pos_limits[..., 1]
@@ -167,6 +168,7 @@ def main():
     period = 500
     open_delta = -0.5  # 5 cm along chosen axis
     close_delta = 0.0
+    robot_animation_range = 0.5  # Reduce this value to make robot animation smaller (0.5 = half range, 1.0 = full 2π)
 
     print("[INFO] Done. Close the window to exit.")
     while simulation_app.is_running():
@@ -189,7 +191,7 @@ def main():
         door2_xform.SetTranslate(new_t, Usd.TimeCode.Default())
 
         # Update robot pose using phase-based animation
-        set_robot_pose_demo(agibot, alpha, animate_agibot_ids)
+        set_robot_pose_demo(agibot, alpha, animate_agibot_ids, robot_animation_range)
 
         if count % 20 == 0:
             print(f"[door2-mesh] delta={delta:+.4f} translate={new_t}")
