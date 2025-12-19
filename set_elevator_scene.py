@@ -64,14 +64,10 @@ class ElevatorSceneCfg(InteractiveSceneCfg):
     )
 
     # robot - positioned at negative x, positive y, facing -y direction
-    # Rotation: -90 degrees around z-axis to face -y (from +x)
-    # Quaternion (w, x, y, z) for -90° around z: (cos(-π/4), 0, 0, sin(-π/4))
-    rot_quat = (math.sqrt(2)/2, 0.0, 0.0, -math.sqrt(2)/2)  # (w, x, y, z) format
-    # Create new init_state with updated position and orientation, preserving joint_pos
+    # Position will be set via init_state, rotation will be set programmatically after scene creation
     updated_init_state = ArticulationCfg.InitialStateCfg(
         joint_pos=AGIBOT_A2D_CFG.init_state.joint_pos,  # Preserve original joint positions
         pos=(-1.0, 0.5, 0.0),  # negative x, positive y, same z
-        rot=rot_quat  # facing -y direction (quaternion: w, x, y, z)
     )
     agibot: ArticulationCfg = AGIBOT_A2D_CFG.replace(
         prim_path="/World/Agibot",
@@ -211,6 +207,14 @@ def main():
 
     # Access the robot articulation (because we used ArticulationCfg)
     agibot: Articulation = scene["agibot"]
+
+    # Set robot orientation to face -y direction (rotate -90 degrees around z-axis)
+    # Quaternion format: (w, x, y, z) for -90° around z: (cos(-π/4), 0, 0, sin(-π/4))
+    quat_w = math.sqrt(2) / 2
+    quat_z = -math.sqrt(2) / 2
+    # Root pose format: [x, y, z, qw, qx, qy, qz]
+    root_pose = torch.tensor([-1.0, 0.5, 0.0, quat_w, 0.0, 0.0, quat_z], device=agibot.device).unsqueeze(0)
+    agibot.write_root_pose_to_sim(root_pose)
 
     # Setup robot joint animation - find left and right arm joints
     left_joint_names = [
