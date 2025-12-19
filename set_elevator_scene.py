@@ -136,8 +136,10 @@ def main():
 
     # Setup robot joint animation
     animate_agibot_joint_names = [
-        n for n in agibot.data.joint_names
-        if n.startswith("left_arm_joint") or n.startswith("right_arm_joint")
+        # n for n in agibot.data.joint_names
+        # if n.startswith("left_arm_joint") or n.startswith("right_arm_joint")
+        "left_arm_joint[1-3]",
+        "right_arm_joint[1-3]",
     ]
     animate_agibot_ids, _ = agibot.find_joints(animate_agibot_joint_names)
     if len(animate_agibot_ids) > 0:
