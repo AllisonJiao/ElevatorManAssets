@@ -98,21 +98,38 @@ def set_articulation_joints_by_name(
     # Write back to simulator immediately (this is the "no simulation" teleport)
     art.write_joint_state_to_sim(q, qd, env_ids=env_ids)
 
-def set_robot_pose_demo(agibot: Articulation, phase: float, animate_joint_ids: torch.Tensor, animation_range: float = 1.0):
+def set_robot_pose_demo(
+    agibot: Articulation, 
+    phase: float, 
+    left_joint_ids: torch.Tensor,
+    right_joint_ids: torch.Tensor,
+    robot_animation_range: float = 1.0
+):
     """Set robot joints based on phase for smooth animation.
     
     Args:
         agibot: The robot articulation
         phase: Normalized phase value [0, 1] for animation cycle
-        animate_joint_ids: Tensor of joint indices to animate
-        animation_range: Multiplier for animation range (default 1.0 = full 2π rotation)
+        left_joint_ids: Tensor of left arm joint indices to animate (rotates opposite direction)
+        right_joint_ids: Tensor of right arm joint indices to animate
+        robot_animation_range: Multiplier for animation range (default 1.0 = full 2π rotation)
     """
-    if len(animate_joint_ids) == 0:
+    if len(left_joint_ids) == 0 and len(right_joint_ids) == 0:
         return
     
     # Calculate joint positions based on phase (smooth rotation)
+    # Start with default positions
     joint_pos_target = agibot.data.default_joint_pos.clone()
-    joint_pos_target[:, animate_joint_ids] += phase * (2 * torch.pi * animation_range)
+    
+    # Apply animation to left joints (negative direction)
+    if len(left_joint_ids) > 0:
+        joint_pos_target[:, left_joint_ids] -= phase * (2 * torch.pi * robot_animation_range)
+    
+    # Apply animation to right joints (positive direction)
+    if len(right_joint_ids) > 0:
+        joint_pos_target[:, right_joint_ids] += phase * (2 * torch.pi * robot_animation_range)
+    
+    # Clamp to joint limits
     joint_pos_target = joint_pos_target.clamp_(
         agibot.data.soft_joint_pos_limits[..., 0], 
         agibot.data.soft_joint_pos_limits[..., 1]
@@ -134,19 +151,26 @@ def main():
     # Access the robot articulation (because we used ArticulationCfg)
     agibot: Articulation = scene["agibot"]
 
-    # Setup robot joint animation
-    animate_agibot_joint_names = [
-        # n for n in agibot.data.joint_names
-        # if n.startswith("left_arm_joint") or n.startswith("right_arm_joint")
-        "left_arm_joint[1-3]",
-        "right_arm_joint[1-3]",
+    # Setup robot joint animation - find left and right arm joints
+    left_joint_names = [
+        "left_arm_joint[1-3]"
     ]
-    animate_agibot_ids, _ = agibot.find_joints(animate_agibot_joint_names)
-    if len(animate_agibot_ids) > 0:
-        animate_agibot_ids = torch.as_tensor(animate_agibot_ids, device=agibot.device, dtype=torch.long)
-        print(f"[INFO] Animating {len(animate_agibot_ids)} robot arm joints: {animate_agibot_joint_names}")
+    right_joint_names = [
+        "right_arm_joint[1-3]"
+    ]
+    
+    left_joint_ids, _ = agibot.find_joints(left_joint_names)
+    right_joint_ids, _ = agibot.find_joints(right_joint_names)
+    
+    if len(left_joint_ids) > 0 or len(right_joint_ids) > 0:
+        left_joint_ids = torch.as_tensor(left_joint_ids, device=agibot.device, dtype=torch.long)
+        right_joint_ids = torch.as_tensor(right_joint_ids, device=agibot.device, dtype=torch.long)
+        print(f"[INFO] Animating {len(left_joint_ids)} left arm joints and {len(right_joint_ids)} right arm joints")
+        print(f"  Left joints: {left_joint_names}")
+        print(f"  Right joints: {right_joint_names}")
     else:
-        animate_agibot_ids = torch.tensor([], device=agibot.device, dtype=torch.long)
+        left_joint_ids = torch.tensor([], device=agibot.device, dtype=torch.long)
+        right_joint_ids = torch.tensor([], device=agibot.device, dtype=torch.long)
         print("[WARN] No arm joints found for animation. Robot will use default pose.")
 
     # Setup door2 mesh transform animation
@@ -192,8 +216,8 @@ def main():
         new_t = Gf.Vec3d(init_t[0] + delta, init_t[1], init_t[2])
         door2_xform.SetTranslate(new_t, Usd.TimeCode.Default())
 
-        # Update robot pose using phase-based animation
-        set_robot_pose_demo(agibot, alpha, animate_agibot_ids, robot_animation_range)
+        # Update robot pose using phase-based animation (left and right together)
+        set_robot_pose_demo(agibot, alpha, left_joint_ids, right_joint_ids, robot_animation_range)
 
         if count % 20 == 0:
             print(f"[door2-mesh] delta={delta:+.4f} translate={new_t}")
