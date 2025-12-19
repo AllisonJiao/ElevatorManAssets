@@ -103,7 +103,8 @@ def set_robot_pose_demo(
     phase: float, 
     left_joint_ids: torch.Tensor,
     right_joint_ids: torch.Tensor,
-    robot_animation_range: float = 1.0
+    robot_animation_range: float = 1.0,
+    symmetric_base: bool = True
 ):
     """Set robot joints based on phase for smooth animation.
     
@@ -113,21 +114,34 @@ def set_robot_pose_demo(
         left_joint_ids: Tensor of left arm joint indices to animate (rotates opposite direction)
         right_joint_ids: Tensor of right arm joint indices to animate
         robot_animation_range: Multiplier for animation range (default 1.0 = full 2π rotation)
+        symmetric_base: If True, ensures symmetric starting positions for left and right arms
     """
     if len(left_joint_ids) == 0 and len(right_joint_ids) == 0:
         return
     
     # Calculate joint positions based on phase (smooth rotation)
-    # Start with default positions
     joint_pos_target = agibot.data.default_joint_pos.clone()
     
-    # Apply animation to left joints (negative direction)
-    if len(left_joint_ids) > 0:
-        joint_pos_target[:, left_joint_ids] -= phase * (2 * torch.pi * robot_animation_range)
+    # Calculate animation offset
+    animation_offset = phase * (2 * torch.pi * robot_animation_range)
     
-    # Apply animation to right joints (positive direction)
-    if len(right_joint_ids) > 0:
-        joint_pos_target[:, right_joint_ids] += phase * (2 * torch.pi * robot_animation_range)
+    if symmetric_base and len(left_joint_ids) == len(right_joint_ids) and len(left_joint_ids) > 0:
+        # For symmetric motion: use average of left/right defaults as symmetric reference
+        left_default = agibot.data.default_joint_pos[:, left_joint_ids]
+        right_default = agibot.data.default_joint_pos[:, right_joint_ids]
+        symmetric_ref = (left_default + right_default) / 2.0
+        
+        # Apply symmetric animation: left moves negative, right moves positive from reference
+        joint_pos_target[:, left_joint_ids] = symmetric_ref - animation_offset
+        joint_pos_target[:, right_joint_ids] = symmetric_ref + animation_offset
+    else:
+        # Apply animation to left joints (negative direction)
+        if len(left_joint_ids) > 0:
+            joint_pos_target[:, left_joint_ids] -= animation_offset
+        
+        # Apply animation to right joints (positive direction)
+        if len(right_joint_ids) > 0:
+            joint_pos_target[:, right_joint_ids] += animation_offset
     
     # Clamp to joint limits
     joint_pos_target = joint_pos_target.clamp_(
@@ -168,6 +182,14 @@ def main():
         print(f"[INFO] Animating {len(left_joint_ids)} left arm joints and {len(right_joint_ids)} right arm joints")
         print(f"  Left joints: {left_joint_names}")
         print(f"  Right joints: {right_joint_names}")
+        
+        # Debug: Check default positions for symmetry
+        scene.update(sim.get_physics_dt())  # Ensure data is updated
+        if len(left_joint_ids) == len(right_joint_ids) and len(left_joint_ids) > 0:
+            left_default = agibot.data.default_joint_pos[0, left_joint_ids]
+            right_default = agibot.data.default_joint_pos[0, right_joint_ids]
+            print(f"[INFO] Default positions - Left: {left_default.cpu().numpy()}")
+            print(f"[INFO] Default positions - Right: {right_default.cpu().numpy()}")
     else:
         left_joint_ids = torch.tensor([], device=agibot.device, dtype=torch.long)
         right_joint_ids = torch.tensor([], device=agibot.device, dtype=torch.long)
