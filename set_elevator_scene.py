@@ -95,29 +95,8 @@ def set_articulation_joints_by_name(
     q[env_ids[:, None], joint_ids[None, :]] = target_vals[None, :]
     qd[env_ids[:, None], joint_ids[None, :]] = 0.0
 
-    # Write back to simulator immediately (this is the “no simulation” teleport)
+    # Write back to simulator immediately (this is the "no simulation" teleport)
     art.write_joint_state_to_sim(q, qd, env_ids=env_ids)
-
-def setup_door_mesh_xform(door_prim_path: str):
-    stage = omni.usd.get_context().get_stage()
-    door_prim = stage.GetPrimAtPath(door_prim_path)
-    if not door_prim.IsValid():
-        raise RuntimeError(f"Door prim not found at: {door_prim_path}")
-
-    door_xform = UsdGeom.XformCommonAPI(door_prim)
-
-    tc = Usd.TimeCode.Default()
-    init_t, init_r, init_s, init_pivot, _ = door_xform.GetXformVectors(tc)
-    init_t = Gf.Vec3d(init_t)
-
-    print("[INFO] Door initial translate:", init_t)
-    return door_xform, init_t
-
-def set_door_translation(door_xform: UsdGeom.XformCommonAPI, init_t: Gf.Vec3d, offset_xyz):
-    """Offset the door's translate relative to its cached initial translate."""
-    new_t = init_t + Gf.Vec3d(*offset_xyz)
-    # Use Default timecode for live stage edits (viewport)
-    door_xform.SetTranslate(new_t, Usd.TimeCode.Default())
 
 def set_robot_pose_demo(agibot: Articulation):
     """Example: set some robot joints to fixed values instantly."""
@@ -162,15 +141,56 @@ def main():
     # 1) Instantly set joint positions once
     set_robot_pose_demo(agibot)
 
-    # 2) Step a few frames only to refresh viewport (not “simulating” motion)
+    # 2) Step a few frames only to refresh viewport (not "simulating" motion)
     for _ in range(5):
         sim.step()
         scene.update(sim.get_physics_dt())
 
+    # Setup door2 mesh transform animation
+    DOOR2_PRIM_PATH = "/World/Elevator/root/Elevator/ElevatorRig/Door2/Cube_025"
+    stage = omni.usd.get_context().get_stage()
+    door2_prim = stage.GetPrimAtPath(DOOR2_PRIM_PATH)
+    
+    if not door2_prim.IsValid():
+        raise RuntimeError(f"Door2 prim not found at: {DOOR2_PRIM_PATH}")
+
+    door2_xform = UsdGeom.XformCommonAPI(door2_prim)
+
+    # Cache initial transform (we'll only offset translation)
+    tc = Usd.TimeCode.Default()
+    init_t, init_r, init_s, init_pivot, _ = door2_xform.GetXformVectors(tc)
+    init_t = Gf.Vec3d(init_t)  # make sure it's a Vec3d
+    print("[INFO] Door2 initial translate:", init_t)
+
+    # Animation parameters
+    count = 0
+    period = 500
+    open_delta = -0.5  # 5 cm along chosen axis
+    close_delta = 0.0
+
     print("[INFO] Done. Close the window to exit.")
     while simulation_app.is_running():
+        # Calculate door animation delta based on phase
+        phase = count % period
+        if phase < 100:        # opening
+            t = phase / 99.0
+            delta = close_delta + t * (open_delta - close_delta)
+        elif phase < 400:      # hold open
+            delta = open_delta
+        else:                  # closing
+            t = (phase - 400) / 99.0
+            delta = open_delta + t * (close_delta - open_delta)
+
+        # Update door position
+        new_t = Gf.Vec3d(init_t[0] + delta, init_t[1], init_t[2])
+        door2_xform.SetTranslate(new_t, Usd.TimeCode.Default())
+
+        if count % 20 == 0:
+            print(f"[door2-mesh] delta={delta:+.4f} translate={new_t}")
+
         sim.step()
         scene.update(sim.get_physics_dt())
+        count += 1
 
     simulation_app.close()
 
