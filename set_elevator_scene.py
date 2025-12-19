@@ -24,6 +24,7 @@ app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 import torch
+import math
 
 import isaaclab.sim as sim_utils
 # import prims as prim_utils
@@ -62,8 +63,20 @@ class ElevatorSceneCfg(InteractiveSceneCfg):
         ),
     )
 
-    # robot
-    agibot: ArticulationCfg = AGIBOT_A2D_CFG.replace(prim_path="/World/Agibot")
+    # robot - positioned at negative x, positive y, facing -y direction
+    # Rotation: -90 degrees around z-axis to face -y (from +x)
+    # Quaternion (w, x, y, z) for -90° around z: (cos(-π/4), 0, 0, sin(-π/4))
+    rot_quat = (math.sqrt(2)/2, 0.0, 0.0, -math.sqrt(2)/2)  # (w, x, y, z) format
+    # Create new init_state with updated position and orientation, preserving joint_pos
+    updated_init_state = ArticulationCfg.InitialStateCfg(
+        joint_pos=AGIBOT_A2D_CFG.init_state.joint_pos,  # Preserve original joint positions
+        pos=(-1.0, 0.5, 0.0),  # negative x, positive y, same z
+        rot=rot_quat  # facing -y direction (quaternion: w, x, y, z)
+    )
+    agibot: ArticulationCfg = AGIBOT_A2D_CFG.replace(
+        prim_path="/World/Agibot",
+        init_state=updated_init_state
+    )
 
 def set_articulation_joints_by_name(
     art: Articulation,
@@ -138,44 +151,44 @@ def set_robot_pose_demo(
                 # First half: left arm animates forward, right arm stays at symmetric reference
                 left_phase = phase * 2.0  # Map [0, 0.5] to [0, 1]
                 animation_offset = left_phase * (2 * torch.pi * robot_animation_range)
-                joint_pos_target[:, left_joint_ids] = symmetric_ref - animation_offset  # Negative for forward
+                joint_pos_target[:, left_joint_ids] = symmetric_ref + animation_offset
                 joint_pos_target[:, right_joint_ids] = symmetric_ref  # Right stays at symmetric reference
             else:
                 # Second half: right arm animates forward, left arm stays at its final position
                 right_phase = (phase - 0.5) * 2.0  # Map [0.5, 1.0] to [0, 1]
                 animation_offset = right_phase * (2 * torch.pi * robot_animation_range)
                 left_final_offset = (2 * torch.pi * robot_animation_range)  # Left at final position
-                joint_pos_target[:, left_joint_ids] = symmetric_ref - left_final_offset
-                joint_pos_target[:, right_joint_ids] = symmetric_ref + animation_offset  # Positive for forward
+                joint_pos_target[:, left_joint_ids] = symmetric_ref + left_final_offset
+                joint_pos_target[:, right_joint_ids] = symmetric_ref - animation_offset
         else:
-            # Simultaneous movement: both arms move together forward
+            # Simultaneous movement: both arms move together
             animation_offset = phase * (2 * torch.pi * robot_animation_range)
-            joint_pos_target[:, left_joint_ids] = symmetric_ref - animation_offset  # Negative for forward
-            joint_pos_target[:, right_joint_ids] = symmetric_ref + animation_offset  # Positive for forward
+            joint_pos_target[:, left_joint_ids] = symmetric_ref + animation_offset
+            joint_pos_target[:, right_joint_ids] = symmetric_ref - animation_offset
     else:
         if sequential:
             # Sequential movement without symmetric base
             if phase < 0.5:
-                # First half: left arm animates forward
+                # First half: left arm animates
                 left_phase = phase * 2.0
                 animation_offset = left_phase * (2 * torch.pi * robot_animation_range)
                 if len(left_joint_ids) > 0:
-                    joint_pos_target[:, left_joint_ids] -= animation_offset  # Negative for forward
+                    joint_pos_target[:, left_joint_ids] += animation_offset
             else:
-                # Second half: right arm animates forward
+                # Second half: right arm animates
                 right_phase = (phase - 0.5) * 2.0
                 animation_offset = right_phase * (2 * torch.pi * robot_animation_range)
                 if len(left_joint_ids) > 0:
-                    joint_pos_target[:, left_joint_ids] -= (2 * torch.pi * robot_animation_range)  # Left at final (negative)
+                    joint_pos_target[:, left_joint_ids] += (2 * torch.pi * robot_animation_range)  # Left at final
                 if len(right_joint_ids) > 0:
-                    joint_pos_target[:, right_joint_ids] += animation_offset  # Positive for forward
+                    joint_pos_target[:, right_joint_ids] -= animation_offset
         else:
-            # Simultaneous movement forward
+            # Simultaneous movement
             animation_offset = phase * (2 * torch.pi * robot_animation_range)
             if len(left_joint_ids) > 0:
-                joint_pos_target[:, left_joint_ids] -= animation_offset  # Negative for forward
+                joint_pos_target[:, left_joint_ids] += animation_offset
             if len(right_joint_ids) > 0:
-                joint_pos_target[:, right_joint_ids] += animation_offset  # Positive for forward
+                joint_pos_target[:, right_joint_ids] -= animation_offset
     
     # Clamp to joint limits
     joint_pos_target = joint_pos_target.clamp_(
