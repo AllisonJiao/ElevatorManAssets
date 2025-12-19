@@ -24,7 +24,6 @@ app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 import torch
-import math
 
 import isaaclab.sim as sim_utils
 # import prims as prim_utils
@@ -63,16 +62,8 @@ class ElevatorSceneCfg(InteractiveSceneCfg):
         ),
     )
 
-    # robot - positioned at negative x, positive y, facing -y direction
-    # Position will be set via init_state, rotation will be set programmatically after scene creation
-    updated_init_state = ArticulationCfg.InitialStateCfg(
-        joint_pos=AGIBOT_A2D_CFG.init_state.joint_pos,  # Preserve original joint positions
-        pos=(-1.0, 0.5, 0.0),  # negative x, positive y, same z
-    )
-    agibot: ArticulationCfg = AGIBOT_A2D_CFG.replace(
-        prim_path="/World/Agibot",
-        init_state=updated_init_state
-    )
+    # robot
+    agibot: ArticulationCfg = AGIBOT_A2D_CFG.replace(prim_path="/World/Agibot")
 
 def set_articulation_joints_by_name(
     art: Articulation,
@@ -112,79 +103,161 @@ def set_articulation_joints_by_name(
 def set_robot_pose_demo(
     agibot: Articulation, 
     phase: float, 
-    left_joint_ids: torch.Tensor,
-    right_joint_ids: torch.Tensor,
+    left_joint_groups: dict[str, torch.Tensor],
+    right_joint_groups: dict[str, torch.Tensor],
     robot_animation_range: float = 1.0,
     symmetric_base: bool = True,
-    sequential: bool = True
+    sequential: bool = True,
+    sequential_linkages: bool = True
 ):
     """Set robot joints based on phase for smooth animation.
     
     Args:
         agibot: The robot articulation
         phase: Normalized phase value [0, 1] for animation cycle
-        left_joint_ids: Tensor of left arm joint indices to animate
-        right_joint_ids: Tensor of right arm joint indices to animate
+        left_joint_groups: Dict mapping group names to tensors of left arm joint indices (e.g., {"shoulder": [...], "forearm": [...], "gripper": [...]})
+        right_joint_groups: Dict mapping group names to tensors of right arm joint indices
         robot_animation_range: Multiplier for animation range (default 1.0 = full 2π rotation)
         symmetric_base: If True, ensures symmetric starting positions for left and right arms
         sequential: If True, moves arms one at a time (left first, then right). If False, moves both simultaneously.
+        sequential_linkages: If True, animates joint groups (shoulder, forearm, gripper) sequentially within each arm
     """
-    if len(left_joint_ids) == 0 and len(right_joint_ids) == 0:
+    # Get all joint IDs from groups for checking
+    all_left_ids = torch.cat([ids for ids in left_joint_groups.values()]) if left_joint_groups else torch.tensor([], dtype=torch.long, device=agibot.device)
+    all_right_ids = torch.cat([ids for ids in right_joint_groups.values()]) if right_joint_groups else torch.tensor([], dtype=torch.long, device=agibot.device)
+    
+    if len(all_left_ids) == 0 and len(all_right_ids) == 0:
         return
     
     # Calculate joint positions based on phase (smooth rotation)
     joint_pos_target = agibot.data.default_joint_pos.clone()
     
-    if symmetric_base and len(left_joint_ids) == len(right_joint_ids) and len(left_joint_ids) > 0:
+    # Get group names in order (shoulder, forearm, gripper)
+    group_names = list(left_joint_groups.keys()) if left_joint_groups else list(right_joint_groups.keys())
+    num_groups = len(group_names)
+    
+    def animate_joint_group(group_ids, group_phase, symmetric_ref_group=None, is_left=True):
+        """Helper to animate a joint group based on phase"""
+        if len(group_ids) == 0:
+        return
+
+        animation_offset = group_phase * (2 * torch.pi * robot_animation_range)
+        if symmetric_ref_group is not None:
+            if is_left:
+                joint_pos_target[:, group_ids] = symmetric_ref_group + animation_offset
+            else:
+                joint_pos_target[:, group_ids] = symmetric_ref_group - animation_offset
+        else:
+            if is_left:
+                joint_pos_target[:, group_ids] += animation_offset
+            else:
+                joint_pos_target[:, group_ids] -= animation_offset
+    
+    if symmetric_base and len(all_left_ids) > 0 and len(all_right_ids) > 0:
         # For symmetric motion: use average of left/right defaults as symmetric reference
-        left_default = agibot.data.default_joint_pos[:, left_joint_ids]
-        right_default = agibot.data.default_joint_pos[:, right_joint_ids]
-        symmetric_ref = (left_default + right_default) / 2.0
+        # Compute symmetric ref for each group separately
+        symmetric_refs = {}
+        for group_name in group_names:
+            left_group_ids = left_joint_groups[group_name]
+            right_group_ids = right_joint_groups[group_name]
+            if len(left_group_ids) > 0 and len(right_group_ids) > 0:
+                left_default_group = agibot.data.default_joint_pos[:, left_group_ids]
+                right_default_group = agibot.data.default_joint_pos[:, right_group_ids]
+                symmetric_refs[group_name] = (left_default_group + right_default_group) / 2.0
+        
+        # Also compute for all joints together (for non-sequential-linkages case)
+        left_default_all = agibot.data.default_joint_pos[:, all_left_ids]
+        right_default_all = agibot.data.default_joint_pos[:, all_right_ids]
+        symmetric_ref_all = (left_default_all + right_default_all) / 2.0
         
         if sequential:
             # Sequential movement: left arm moves first (phase 0-0.5), then right arm (phase 0.5-1.0)
             if phase < 0.5:
-                # First half: left arm animates forward, right arm stays at symmetric reference
                 left_phase = phase * 2.0  # Map [0, 0.5] to [0, 1]
-                animation_offset = left_phase * (2 * torch.pi * robot_animation_range)
-                joint_pos_target[:, left_joint_ids] = symmetric_ref + animation_offset
-                joint_pos_target[:, right_joint_ids] = symmetric_ref  # Right stays at symmetric reference
+                
+                if sequential_linkages and num_groups > 0:
+                    # Animate left arm groups sequentially
+                    group_phase_range = 1.0 / num_groups
+                    for i, group_name in enumerate(group_names):
+                        group_start = i * group_phase_range
+                        group_end = (i + 1) * group_phase_range
+                        if left_phase >= group_end:
+                            # This group is complete, set to final position
+                            animate_joint_group(left_joint_groups[group_name], 1.0, symmetric_refs[group_name], is_left=True)
+                        elif left_phase >= group_start:
+                            # This group is currently animating
+                            group_phase = (left_phase - group_start) / group_phase_range
+                            animate_joint_group(left_joint_groups[group_name], group_phase, symmetric_refs[group_name], is_left=True)
+                        else:
+                            # This group hasn't started yet, keep at reference position
+                            joint_pos_target[:, left_joint_groups[group_name]] = symmetric_refs[group_name]
+                    
+                    # Right arm stays at reference
+                    for group_name in group_names:
+                        joint_pos_target[:, right_joint_groups[group_name]] = symmetric_refs[group_name]
+                else:
+                    # Animate all left joints together
+                    animation_offset = left_phase * (2 * torch.pi * robot_animation_range)
+                    joint_pos_target[:, all_left_ids] = symmetric_ref_all + animation_offset
+                    joint_pos_target[:, all_right_ids] = symmetric_ref_all
             else:
-                # Second half: right arm animates forward, left arm stays at its final position
                 right_phase = (phase - 0.5) * 2.0  # Map [0.5, 1.0] to [0, 1]
-                animation_offset = right_phase * (2 * torch.pi * robot_animation_range)
-                left_final_offset = (2 * torch.pi * robot_animation_range)  # Left at final position
-                joint_pos_target[:, left_joint_ids] = symmetric_ref + left_final_offset
-                joint_pos_target[:, right_joint_ids] = symmetric_ref - animation_offset
+                
+                # Left arm at final position
+                left_final_offset = (2 * torch.pi * robot_animation_range)
+                joint_pos_target[:, all_left_ids] = symmetric_ref_all + left_final_offset
+                
+                if sequential_linkages and num_groups > 0:
+                    # Animate right arm groups sequentially
+                    group_phase_range = 1.0 / num_groups
+                    for i, group_name in enumerate(group_names):
+                        group_start = i * group_phase_range
+                        group_end = (i + 1) * group_phase_range
+                        if right_phase >= group_end:
+                            # This group is complete, set to final position
+                            animate_joint_group(right_joint_groups[group_name], 1.0, symmetric_refs[group_name], is_left=False)
+                        elif right_phase >= group_start:
+                            # This group is currently animating
+                            group_phase = (right_phase - group_start) / group_phase_range
+                            animate_joint_group(right_joint_groups[group_name], group_phase, symmetric_refs[group_name], is_left=False)
+                        else:
+                            # This group hasn't started yet, keep at reference position
+                            joint_pos_target[:, right_joint_groups[group_name]] = symmetric_refs[group_name]
+                else:
+                    # Animate all right joints together
+                    animation_offset = right_phase * (2 * torch.pi * robot_animation_range)
+                    joint_pos_target[:, all_right_ids] = symmetric_ref_all - animation_offset
         else:
             # Simultaneous movement: both arms move together
-            animation_offset = phase * (2 * torch.pi * robot_animation_range)
-            joint_pos_target[:, left_joint_ids] = symmetric_ref + animation_offset
-            joint_pos_target[:, right_joint_ids] = symmetric_ref - animation_offset
-    else:
-        if sequential:
-            # Sequential movement without symmetric base
-            if phase < 0.5:
-                # First half: left arm animates
-                left_phase = phase * 2.0
-                animation_offset = left_phase * (2 * torch.pi * robot_animation_range)
-                if len(left_joint_ids) > 0:
-                    joint_pos_target[:, left_joint_ids] += animation_offset
+            if sequential_linkages and num_groups > 0:
+                group_phase_range = 1.0 / num_groups
+                for i, group_name in enumerate(group_names):
+                    group_start = i * group_phase_range
+                    group_end = (i + 1) * group_phase_range
+                    if phase >= group_end:
+                        # This group is complete, set to final position
+                        animate_joint_group(left_joint_groups[group_name], 1.0, symmetric_refs[group_name], is_left=True)
+                        animate_joint_group(right_joint_groups[group_name], 1.0, symmetric_refs[group_name], is_left=False)
+                    elif phase >= group_start:
+                        # This group is currently animating
+                        group_phase = (phase - group_start) / group_phase_range
+                        animate_joint_group(left_joint_groups[group_name], group_phase, symmetric_refs[group_name], is_left=True)
+                        animate_joint_group(right_joint_groups[group_name], group_phase, symmetric_refs[group_name], is_left=False)
+                    else:
+                        # This group hasn't started yet, keep at reference position
+                        joint_pos_target[:, left_joint_groups[group_name]] = symmetric_refs[group_name]
+                        joint_pos_target[:, right_joint_groups[group_name]] = symmetric_refs[group_name]
             else:
-                # Second half: right arm animates
-                right_phase = (phase - 0.5) * 2.0
-                animation_offset = right_phase * (2 * torch.pi * robot_animation_range)
-                if len(left_joint_ids) > 0:
-                    joint_pos_target[:, left_joint_ids] += (2 * torch.pi * robot_animation_range)  # Left at final
-                if len(right_joint_ids) > 0:
-                    joint_pos_target[:, right_joint_ids] -= animation_offset
-        else:
-            # Simultaneous movement
-            animation_offset = phase * (2 * torch.pi * robot_animation_range)
-            if len(left_joint_ids) > 0:
-                joint_pos_target[:, left_joint_ids] += animation_offset
-            if len(right_joint_ids) > 0:
-                joint_pos_target[:, right_joint_ids] -= animation_offset
+                animation_offset = phase * (2 * torch.pi * robot_animation_range)
+                joint_pos_target[:, all_left_ids] = symmetric_ref_all + animation_offset
+                joint_pos_target[:, all_right_ids] = symmetric_ref_all - animation_offset
+    else:
+        # Non-symmetric base - simplified version (can be expanded if needed)
+        animation_offset = phase * (2 * torch.pi * robot_animation_range) if not sequential else (phase * 2.0 if phase < 0.5 else (phase - 0.5) * 2.0) * (2 * torch.pi * robot_animation_range)
+        if len(all_left_ids) > 0:
+            joint_pos_target[:, all_left_ids] += animation_offset if phase < 0.5 or not sequential else (2 * torch.pi * robot_animation_range)
+        if len(all_right_ids) > 0:
+            joint_pos_target[:, all_right_ids] -= animation_offset if phase >= 0.5 or not sequential else 0
     
     # Clamp to joint limits
     joint_pos_target = joint_pos_target.clamp_(
@@ -208,42 +281,49 @@ def main():
     # Access the robot articulation (because we used ArticulationCfg)
     agibot: Articulation = scene["agibot"]
 
-    # Set robot orientation to face -y direction (rotate -90 degrees around z-axis)
-    # Quaternion format: (w, x, y, z) for -90° around z: (cos(-π/4), 0, 0, sin(-π/4))
-    quat_w = math.sqrt(2) / 2
-    quat_z = -math.sqrt(2) / 2
-    # Root pose format: [x, y, z, qw, qx, qy, qz]
-    root_pose = torch.tensor([-1.0, 0.5, 0.0, quat_w, 0.0, 0.0, quat_z], device=agibot.device).unsqueeze(0)
-    agibot.write_root_pose_to_sim(root_pose)
-
-    # Setup robot joint animation - find left and right arm joints
-    left_joint_names = [
-        "left_arm_joint[1-7]"
-    ]
-    right_joint_names = [
-        "right_arm_joint[1-7]"
-    ]
+    # Setup robot joint animation - organize into groups: shoulder (1-3), forearm (4-5), gripper (6-7)
+    left_shoulder_names = ["left_arm_joint1", "left_arm_joint2", "left_arm_joint3"]
+    left_forearm_names = ["left_arm_joint4", "left_arm_joint5"]
+    left_gripper_names = ["left_arm_joint6", "left_arm_joint7"]
     
-    left_joint_ids, _ = agibot.find_joints(left_joint_names)
-    right_joint_ids, _ = agibot.find_joints(right_joint_names)
+    right_shoulder_names = ["right_arm_joint1", "right_arm_joint2", "right_arm_joint3"]
+    right_forearm_names = ["right_arm_joint4", "right_arm_joint5"]
+    right_gripper_names = ["right_arm_joint6", "right_arm_joint7"]
     
-    if len(left_joint_ids) > 0 or len(right_joint_ids) > 0:
-        left_joint_ids = torch.as_tensor(left_joint_ids, device=agibot.device, dtype=torch.long)
-        right_joint_ids = torch.as_tensor(right_joint_ids, device=agibot.device, dtype=torch.long)
-        print(f"[INFO] Animating {len(left_joint_ids)} left arm joints and {len(right_joint_ids)} right arm joints")
-        print(f"  Left joints: {left_joint_names}")
-        print(f"  Right joints: {right_joint_names}")
+    # Find joint indices for each group
+    left_shoulder_ids, _ = agibot.find_joints(left_shoulder_names)
+    left_forearm_ids, _ = agibot.find_joints(left_forearm_names)
+    left_gripper_ids, _ = agibot.find_joints(left_gripper_names)
+    
+    right_shoulder_ids, _ = agibot.find_joints(right_shoulder_names)
+    right_forearm_ids, _ = agibot.find_joints(right_forearm_names)
+    right_gripper_ids, _ = agibot.find_joints(right_gripper_names)
+    
+    # Organize into groups
+    left_joint_groups = {
+        "shoulder": torch.as_tensor(left_shoulder_ids, device=agibot.device, dtype=torch.long),
+        "forearm": torch.as_tensor(left_forearm_ids, device=agibot.device, dtype=torch.long),
+        "gripper": torch.as_tensor(left_gripper_ids, device=agibot.device, dtype=torch.long),
+    }
+    right_joint_groups = {
+        "shoulder": torch.as_tensor(right_shoulder_ids, device=agibot.device, dtype=torch.long),
+        "forearm": torch.as_tensor(right_forearm_ids, device=agibot.device, dtype=torch.long),
+        "gripper": torch.as_tensor(right_gripper_ids, device=agibot.device, dtype=torch.long),
+    }
+    
+    total_left = sum(len(ids) for ids in left_joint_groups.values())
+    total_right = sum(len(ids) for ids in right_joint_groups.values())
+    
+    if total_left > 0 or total_right > 0:
+        print(f"[INFO] Organized arm joints into groups:")
+        print(f"  Left arm - Shoulder: {len(left_joint_groups['shoulder'])}, Forearm: {len(left_joint_groups['forearm'])}, Gripper: {len(left_joint_groups['gripper'])}")
+        print(f"  Right arm - Shoulder: {len(right_joint_groups['shoulder'])}, Forearm: {len(right_joint_groups['forearm'])}, Gripper: {len(right_joint_groups['gripper'])}")
         
         # Debug: Check default positions for symmetry
         scene.update(sim.get_physics_dt())  # Ensure data is updated
-        if len(left_joint_ids) == len(right_joint_ids) and len(left_joint_ids) > 0:
-            left_default = agibot.data.default_joint_pos[0, left_joint_ids]
-            right_default = agibot.data.default_joint_pos[0, right_joint_ids]
-            print(f"[INFO] Default positions - Left: {left_default.cpu().numpy()}")
-            print(f"[INFO] Default positions - Right: {right_default.cpu().numpy()}")
     else:
-        left_joint_ids = torch.tensor([], device=agibot.device, dtype=torch.long)
-        right_joint_ids = torch.tensor([], device=agibot.device, dtype=torch.long)
+        left_joint_groups = {}
+        right_joint_groups = {}
         print("[WARN] No arm joints found for animation. Robot will use default pose.")
 
     # Setup door2 mesh transform animation
@@ -289,8 +369,11 @@ def main():
         new_t = Gf.Vec3d(init_t[0] + delta, init_t[1], init_t[2])
         door2_xform.SetTranslate(new_t, Usd.TimeCode.Default())
 
-        # Update robot pose using phase-based animation
-        set_robot_pose_demo(agibot, alpha, left_joint_ids, right_joint_ids, robot_animation_range, sequential=not args_cli.simultaneous_arms)
+        # Update robot pose using phase-based animation (with sequential linkage movement)
+        set_robot_pose_demo(
+            agibot, alpha, left_joint_groups, right_joint_groups, robot_animation_range, 
+            sequential=not args_cli.simultaneous_arms, sequential_linkages=True
+        )
 
         if count % 20 == 0:
             print(f"[door2-mesh] delta={delta:+.4f} translate={new_t}")
