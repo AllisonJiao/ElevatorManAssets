@@ -32,6 +32,10 @@ from isaaclab.utils import configclass
 
 from cfg.agibot import AGIBOT_A2D_CFG
 
+# NEW: USD access
+import omni.usd
+from pxr import UsdGeom, Gf, Usd
+
 ELEVATOR_ASSET_PATH = "ElevatorManAssets/assets/Collected_elevator_asset_tmp/elevator_asset.usdc"
 
 @configclass
@@ -94,6 +98,27 @@ def set_articulation_joints_by_name(
     # Write back to simulator immediately (this is the “no simulation” teleport)
     art.write_joint_state_to_sim(q, qd, env_ids=env_ids)
 
+def setup_door_mesh_xform(door_prim_path: str):
+    stage = omni.usd.get_context().get_stage()
+    door_prim = stage.GetPrimAtPath(door_prim_path)
+    if not door_prim.IsValid():
+        raise RuntimeError(f"Door prim not found at: {door_prim_path}")
+
+    door_xform = UsdGeom.XformCommonAPI(door_prim)
+
+    tc = Usd.TimeCode.Default()
+    init_t, init_r, init_s, init_pivot, _ = door_xform.GetXformVectors(tc)
+    init_t = Gf.Vec3d(init_t)
+
+    print("[INFO] Door initial translate:", init_t)
+    return door_xform, init_t
+
+def set_door_translation(door_xform: UsdGeom.XformCommonAPI, init_t: Gf.Vec3d, offset_xyz):
+    """Offset the door's translate relative to its cached initial translate."""
+    new_t = init_t + Gf.Vec3d(*offset_xyz)
+    # Use Default timecode for live stage edits (viewport)
+    door_xform.SetTranslate(new_t, Usd.TimeCode.Default())
+
 def set_robot_pose_demo(agibot: Articulation):
     """Example: set some robot joints to fixed values instantly."""
     # TODO: replace these names with YOUR robot's joint names
@@ -118,14 +143,6 @@ def set_robot_pose_demo(agibot: Articulation):
     print("[INFO] Wrote robot joint state directly.")
 
 def main():
-    parser = argparse.ArgumentParser(description="Directly set joint positions (no control).")
-    parser.add_argument("--num_envs", type=int, default=1)
-    AppLauncher.add_app_launcher_args(parser)
-    args_cli = parser.parse_args()
-
-    app_launcher = AppLauncher(args_cli)
-    simulation_app = app_launcher.app
-
     sim_cfg = sim_utils.SimulationCfg(device=args_cli.device)
     sim = sim_utils.SimulationContext(sim_cfg)
 
@@ -160,4 +177,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    simulation_app.close()
