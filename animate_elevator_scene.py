@@ -87,13 +87,13 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     # ---------------- Scene entities ----------------
     left_cfg = SceneEntityCfg(
         "robot",
-        joint_names=["left_arm_joint[1-5]"],
-        body_names=["Link4_l"],
+        joint_names=["left_arm_joint[1-7]"],
+        body_names=["Link6_l"],
     )
     right_cfg = SceneEntityCfg(
         "robot",
-        joint_names=["right_arm_joint[1-5]"],
-        body_names=["Link4_r"],
+        joint_names=["right_arm_joint[1-7]"],
+        body_names=["Link6_r"],
     )
 
     left_cfg.resolve(scene)
@@ -123,9 +123,9 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     ], device=device)
 
     right_arm_goals = torch.tensor([
-        [0.0, -0.20, -0.60, 0.0, 0.0, 0.0, 1.0],
-        [0.0, -0.20, 0.0, 0.0, 0.0, 0.0, 1.0],
-        [0.0, -0.20, 0.60, 0.0, 0.0, 0.0, 1.0],
+        [0.25, -0.22, 0.18, 0.0, 0.7071, 0.0, 0.7071],
+        [0.30, -0.20, 0.26, 0.0, 0.7071, 0.0, 0.7071],
+        [0.25, -0.18, 0.34, 0.0, 0.7071, 0.0, 0.7071],
     ], device=device)
 
     left_cmd = torch.zeros(scene.num_envs, 7, device=device)
