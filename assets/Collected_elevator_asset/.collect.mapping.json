@@ -6,6 +6,12 @@
             "source_hash": "ff5467c86bf3f65aa335d37160ffac63f6b66177",
             "target_url": "./textures/color_191191191.hdr",
             "target_hash": "b07afafe49535bd214fbb998350013519bcc3118"
+        },
+        {
+            "source_url": "/isaaclab/ElevatorManAssets/assets/Collected_elevator_asset_tmp/textures/color_191191191.hdr",
+            "source_hash": "f0d5d49356c47ce73e33131d7a1c18b381b53fe0",
+            "target_url": "./textures/color_191191191.hdr",
+            "target_hash": "257896065102d6c5dcc4614fe147f9864b794aa0"
         }
     ]
 }
