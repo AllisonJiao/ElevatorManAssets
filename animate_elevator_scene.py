@@ -367,9 +367,10 @@ def main():
         # Update door position using joint-based animation
         joint_pos_target = elevator.data.default_joint_pos.clone()
         joint_pos_target[:, animate_elevator_ids] += delta
-        joint_pos_target = joint_pos_target.clamp_(
-            elevator.data.soft_joint_pos_limits[..., 0], elevator.data.soft_joint_pos_limits[..., 1]
-        )
+        # Temporarily removed clamping to diagnose movement issues
+        # joint_pos_target = joint_pos_target.clamp_(
+        #     elevator.data.soft_joint_pos_limits[..., 0], elevator.data.soft_joint_pos_limits[..., 1]
+        # )
         elevator.set_joint_position_target(joint_pos_target)
         elevator.write_data_to_sim()
 
