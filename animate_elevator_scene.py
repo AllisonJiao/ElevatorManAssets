@@ -69,7 +69,9 @@ def set_robot_pose_demo(
     sequential: bool = True,
     sequential_linkages: bool = True,
     cached_symmetric_refs: dict[str, torch.Tensor] = None,
-    cached_symmetric_ref_all: torch.Tensor = None
+    cached_symmetric_ref_all: torch.Tensor = None,
+    lift_body_joint_ids: torch.Tensor = None,
+    lift_body_target: torch.Tensor = None
 ):
     """Set robot joints based on phase for smooth animation.
     
@@ -224,6 +226,10 @@ def set_robot_pose_demo(
             joint_pos_target[:, all_left_ids] += animation_offset if phase < 0.5 or not sequential else (2 * torch.pi * robot_animation_range)
         if len(all_right_ids) > 0:
             joint_pos_target[:, all_right_ids] -= animation_offset if phase >= 0.5 or not sequential else 0
+    
+    # Apply lift_body animation if provided (this preserves arm joint targets)
+    if lift_body_joint_ids is not None and lift_body_target is not None and len(lift_body_joint_ids) > 0:
+        joint_pos_target[:, lift_body_joint_ids] = lift_body_target
     
     # Clamp to joint limits
     joint_pos_target = joint_pos_target.clamp_(
@@ -382,33 +388,25 @@ def main():
         elevator.set_joint_position_target(joint_pos_target)
         elevator.write_data_to_sim()
         
+        # Calculate lift_body animation target (same phase-based pattern as door)
+        lift_body_target = None
+        if len(lift_body_joint_ids) > 0:
+            # Apply lift_body animation: default position + scaled delta (same pattern as door)
+            lift_body_target = agibot.data.default_joint_pos[:, lift_body_joint_ids] + (delta * lift_body_range)
+        
         # Update robot pose using phase-based animation (with sequential linkage movement)
+        # This includes both arm animation and lift_body animation, set together to avoid overwriting
         set_robot_pose_demo(
             agibot, alpha, left_joint_groups, right_joint_groups, robot_animation_range, 
             sequential=not args_cli.simultaneous_arms, sequential_linkages=True,
             cached_symmetric_refs=cached_symmetric_refs,
-            cached_symmetric_ref_all=cached_symmetric_ref_all
+            cached_symmetric_ref_all=cached_symmetric_ref_all,
+            lift_body_joint_ids=lift_body_joint_ids if len(lift_body_joint_ids) > 0 else None,
+            lift_body_target=lift_body_target
         )
         
-        # Animate robot's joint_lift_body prismatic joint (for testing/reference)
-        # Uses same phase-based animation as door to see how prismatic joints work with same actuator settings
-        if len(lift_body_joint_ids) > 0:
-            # Apply lift_body animation: default position + scaled delta (same pattern as door)
-            lift_body_target = agibot.data.default_joint_pos[:, lift_body_joint_ids] + (delta * lift_body_range)
-            # Get current joint position targets (arm animation sets these)
-            # We'll update just lift_body - need to preserve arm joint targets
-            # Since arm animation sets all joints from defaults, we can rebuild: 
-            # Start from defaults (where arm joints will be after arm animation resets them),
-            # then apply lift_body animation
-            # Note: This will reset arm joints to defaults, but arm animation will have already
-            # written arm targets to sim, so for testing purposes this is acceptable
-            all_joint_targets = agibot.data.default_joint_pos.clone()
-            all_joint_targets[:, lift_body_joint_ids] = lift_body_target
-            agibot.set_joint_position_target(all_joint_targets)
-            agibot.write_data_to_sim()
-            
-            if count % 20 == 0:
-                print(f"lift_body target: {lift_body_target[0, 0].item():.4f}")
+        if len(lift_body_joint_ids) > 0 and count % 20 == 0:
+            print(f"lift_body target: {lift_body_target[0, 0].item():.4f}")
 
         if count % 20 == 0:
             print("door2 target:", joint_pos_target[0, animate_elevator_ids].item())
