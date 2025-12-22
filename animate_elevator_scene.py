@@ -325,6 +325,12 @@ def main():
     animate_elevator_joint_names = [ "door2_joint" ]
     animate_elevator_ids, _ = elevator.find_joints(animate_elevator_joint_names)
     animate_elevator_ids = torch.as_tensor(animate_elevator_ids, device=elevator.device, dtype=torch.long)
+    if len(animate_elevator_ids) > 0:
+        print(f"[INFO] Found door2_joint at index {animate_elevator_ids[0].item()}")
+        print(f"[INFO] door2_joint default position: {elevator.data.default_joint_pos[0, animate_elevator_ids[0]].item():.6f}")
+        print(f"[INFO] door2_joint joint type: {elevator.data.joint_types[animate_elevator_ids[0]].item() if hasattr(elevator.data, 'joint_types') else 'N/A'}")
+    else:
+        print("[ERROR] door2_joint not found!")
     
     # Setup robot's joint_lift_body prismatic joint animation (for testing/reference)
     lift_body_joint_names = ["joint_lift_body"]
@@ -406,13 +412,25 @@ def main():
         )
         
         if len(lift_body_joint_ids) > 0 and count % 20 == 0:
-            print(f"lift_body target: {lift_body_target[0, 0].item():.4f}")
-
-        if count % 20 == 0:
-            print("door2 target:", joint_pos_target[0, animate_elevator_ids].item())
+            print(f"[lift_body] target: {lift_body_target[0, 0].item():.4f}")
 
         sim.step()
         scene.update(sim.get_physics_dt())
+        
+        # Debug door2 joint: compare target vs actual
+        if count % 20 == 0:
+            # Get actual joint data after physics update
+            actual_pos = elevator.data.joint_pos[:, animate_elevator_ids]
+            actual_vel = elevator.data.joint_vel[:, animate_elevator_ids]
+            target_pos = joint_pos_target[:, animate_elevator_ids]
+            
+            print(f"[door2] target: {target_pos[0, 0].item():.6f}, actual: {actual_pos[0, 0].item():.6f}, vel: {actual_vel[0, 0].item():.6f}, diff: {(target_pos[0, 0] - actual_pos[0, 0]).item():.6f}")
+            
+            # Also print joint limits to see if we're hitting them
+            joint_limits_lower = elevator.data.soft_joint_pos_limits[0, animate_elevator_ids, 0]
+            joint_limits_upper = elevator.data.soft_joint_pos_limits[0, animate_elevator_ids, 1]
+            print(f"[door2] limits: [{joint_limits_lower[0].item():.6f}, {joint_limits_upper[0].item():.6f}]")
+        
         count += 1
 
     simulation_app.close()
