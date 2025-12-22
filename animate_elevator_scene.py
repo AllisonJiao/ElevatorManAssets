@@ -246,6 +246,7 @@ def main():
 
     # Access the robot articulation (because we used ArticulationCfg)
     agibot: Articulation = scene["agibot"]
+    elevator: Articulation = scene["elevator"]
 
     # Setup robot joint animation - organize into groups: shoulder (1-3), forearm (4-5), gripper (6-7)
     left_shoulder_names = ["left_arm_joint1", "left_arm_joint2", "left_arm_joint3"]
@@ -312,25 +313,28 @@ def main():
         print("[WARN] No arm joints found for animation. Robot will use default pose.")
 
     # Setup door2 mesh transform animation
-    DOOR2_PRIM_PATH = "/World/Elevator/root/Elevator/ElevatorRig/Door2/Cube_025"
-    stage = omni.usd.get_context().get_stage()
-    door2_prim = stage.GetPrimAtPath(DOOR2_PRIM_PATH)
+    # DOOR2_PRIM_PATH = "/World/Elevator/root/Elevator/ElevatorRig/Door2/Cube_025"
+    # stage = omni.usd.get_context().get_stage()
+    # door2_prim = stage.GetPrimAtPath(DOOR2_PRIM_PATH)
+    animate_elevator_joint_names = [ "door2_joint" ]
+    animate_elevator_ids, _ = elevator.find_joints(animate_elevator_joint_names)
+    animate_elevator_ids = torch.as_tensor(animate_elevator_ids, device=elevator.device, dtype=torch.long)
     
-    if not door2_prim.IsValid():
-        raise RuntimeError(f"Door2 prim not found at: {DOOR2_PRIM_PATH}")
+    # if not door2_prim.IsValid():
+    #     raise RuntimeError(f"Door2 prim not found at: {DOOR2_PRIM_PATH}")
 
-    door2_xform = UsdGeom.XformCommonAPI(door2_prim)
+    # door2_xform = UsdGeom.XformCommonAPI(door2_prim)
 
     # Cache initial transform (we'll only offset translation)
-    tc = Usd.TimeCode.Default()
-    init_t, init_r, init_s, init_pivot, _ = door2_xform.GetXformVectors(tc)
-    init_t = Gf.Vec3d(init_t)  # make sure it's a Vec3d
-    print("[INFO] Door2 initial translate:", init_t)
+    # tc = Usd.TimeCode.Default()
+    # init_t, init_r, init_s, init_pivot, _ = door2_xform.GetXformVectors(tc)
+    # init_t = Gf.Vec3d(init_t)  # make sure it's a Vec3d
+    # print("[INFO] Door2 initial translate:", init_t)
 
     # Animation parameters
     count = 0
     period = 500
-    open_delta = -0.5  # 5 cm along chosen axis
+    open_delta = -0.5  # 50 cm along chosen axis
     close_delta = 0.0
     robot_animation_range = args_cli.robot_animation_range
 
@@ -360,9 +364,14 @@ def main():
             t = (phase - 400) / 99.0
             delta = open_delta + t * (close_delta - open_delta)
 
-        # Update door position
-        new_t = Gf.Vec3d(init_t[0] + delta, init_t[1], init_t[2])
-        door2_xform.SetTranslate(new_t, Usd.TimeCode.Default())
+        # Update door position using joint-based animation
+        joint_pos_target = elevator.data.default_joint_pos.clone()
+        joint_pos_target[:, animate_elevator_ids] += delta
+        joint_pos_target = joint_pos_target.clamp_(
+            elevator.data.soft_joint_pos_limits[..., 0], elevator.data.soft_joint_pos_limits[..., 1]
+        )
+        elevator.set_joint_position_target(joint_pos_target)
+        elevator.write_data_to_sim()
 
         # Update robot pose using phase-based animation (with sequential linkage movement)
         set_robot_pose_demo(
@@ -373,7 +382,7 @@ def main():
         )
 
         if count % 20 == 0:
-            print(f"[door2-mesh] delta={delta:+.4f} translate={new_t}")
+            print("door2 target:", joint_pos_target[0, animate_elevator_ids].item())
 
         sim.step()
         scene.update(sim.get_physics_dt())
