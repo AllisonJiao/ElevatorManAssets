@@ -33,12 +33,11 @@ from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.utils import configclass
 
 from cfg.agibot import AGIBOT_A2D_CFG
+from cfg.elevator import ELEVATOR_CFG
 
 # NEW: USD access
 import omni.usd
 from pxr import UsdGeom, Gf, Usd
-
-ELEVATOR_ASSET_PATH = "ElevatorManAssets/assets/Collected_elevator_asset_tmp/elevator_asset.usdc"
 
 @configclass
 class ElevatorSceneCfg(InteractiveSceneCfg):
@@ -55,50 +54,10 @@ class ElevatorSceneCfg(InteractiveSceneCfg):
     )
 
     # elevator
-    elevator = AssetBaseCfg(
-        prim_path="/World/Elevator/root",
-        spawn=sim_utils.UsdFileCfg(
-            usd_path=ELEVATOR_ASSET_PATH
-        ),
-    )
+    elevator: ArticulationCfg = ELEVATOR_CFG.replace(prim_path="/World/Elevator/root")
 
     # robot
     agibot: ArticulationCfg = AGIBOT_A2D_CFG.replace(prim_path="/World/Agibot")
-
-def set_articulation_joints_by_name(
-    art: Articulation,
-    joint_targets: dict[str, float],
-    env_ids: torch.Tensor | None = None,
-):
-    """Directly overwrite joint positions (q) in the simulator for selected joints.
-
-    joint_targets: {"joint_name": target_position_in_radians_or_meters, ...}
-    """
-    if env_ids is None:
-        env_ids = torch.arange(art.num_envs, device=art.device)
-
-    # Resolve joint indices
-    joint_names = list(joint_targets.keys())
-    joint_ids, _ = art.find_joints(joint_names)
-    if len(joint_ids) != len(joint_names):
-        missing = set(joint_names) - set([art.joint_names[i] for i in joint_ids])
-        raise RuntimeError(f"Some joints were not found: {missing}")
-
-    # Read current full joint state
-    q = art.data.joint_pos.clone()
-    qd = art.data.joint_vel.clone()
-
-    # Overwrite only the selected joints for selected envs
-    target_vals = torch.tensor(
-        [joint_targets[n] for n in joint_names],
-        device=art.device,
-        dtype=q.dtype,
-    )
-    q[env_ids[:, None], joint_ids[None, :]] = target_vals[None, :]
-    qd[env_ids[:, None], joint_ids[None, :]] = 0.0
-
-    # Write back to simulator immediately (this is the "no simulation" teleport)
-    art.write_joint_state_to_sim(q, qd, env_ids=env_ids)
 
 def set_robot_pose_demo(
     agibot: Articulation, 
