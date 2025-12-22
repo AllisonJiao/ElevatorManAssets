@@ -320,6 +320,13 @@ def main():
     animate_elevator_ids, _ = elevator.find_joints(animate_elevator_joint_names)
     animate_elevator_ids = torch.as_tensor(animate_elevator_ids, device=elevator.device, dtype=torch.long)
     
+    # Setup robot's joint_lift_body prismatic joint animation (for testing/reference)
+    lift_body_joint_names = ["joint_lift_body"]
+    lift_body_joint_ids, _ = agibot.find_joints(lift_body_joint_names)
+    lift_body_joint_ids = torch.as_tensor(lift_body_joint_ids, device=agibot.device, dtype=torch.long)
+    if len(lift_body_joint_ids) > 0:
+        print(f"[INFO] Found joint_lift_body joint for testing prismatic joint movement")
+    
     # if not door2_prim.IsValid():
     #     raise RuntimeError(f"Door2 prim not found at: {DOOR2_PRIM_PATH}")
 
@@ -337,6 +344,7 @@ def main():
     open_delta = -0.5  # 50 cm along chosen axis
     close_delta = 0.0
     robot_animation_range = args_cli.robot_animation_range
+    lift_body_range = 0.2  # Range for joint_lift_body animation (meters)
 
     print("[INFO] Done. Close the window to exit.")
     while simulation_app.is_running():
@@ -373,7 +381,7 @@ def main():
         # )
         elevator.set_joint_position_target(joint_pos_target)
         elevator.write_data_to_sim()
-
+        
         # Update robot pose using phase-based animation (with sequential linkage movement)
         set_robot_pose_demo(
             agibot, alpha, left_joint_groups, right_joint_groups, robot_animation_range, 
@@ -381,6 +389,26 @@ def main():
             cached_symmetric_refs=cached_symmetric_refs,
             cached_symmetric_ref_all=cached_symmetric_ref_all
         )
+        
+        # Animate robot's joint_lift_body prismatic joint (for testing/reference)
+        # Uses same phase-based animation as door to see how prismatic joints work with same actuator settings
+        if len(lift_body_joint_ids) > 0:
+            # Apply lift_body animation: default position + scaled delta (same pattern as door)
+            lift_body_target = agibot.data.default_joint_pos[:, lift_body_joint_ids] + (delta * lift_body_range)
+            # Get current joint position targets (arm animation sets these)
+            # We'll update just lift_body - need to preserve arm joint targets
+            # Since arm animation sets all joints from defaults, we can rebuild: 
+            # Start from defaults (where arm joints will be after arm animation resets them),
+            # then apply lift_body animation
+            # Note: This will reset arm joints to defaults, but arm animation will have already
+            # written arm targets to sim, so for testing purposes this is acceptable
+            all_joint_targets = agibot.data.default_joint_pos.clone()
+            all_joint_targets[:, lift_body_joint_ids] = lift_body_target
+            agibot.set_joint_position_target(all_joint_targets)
+            agibot.write_data_to_sim()
+            
+            if count % 20 == 0:
+                print(f"lift_body target: {lift_body_target[0, 0].item():.4f}")
 
         if count % 20 == 0:
             print("door2 target:", joint_pos_target[0, animate_elevator_ids].item())

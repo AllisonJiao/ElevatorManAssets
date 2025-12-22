@@ -67,10 +67,10 @@ ELEVATOR_CFG = ArticulationCfg(
         # Elevator doors
         "elevator_doors": ImplicitActuatorCfg(
             joint_names_expr=["door[1-2]_joint"],
-            effort_limit_sim=400.0,
-            velocity_limit_sim=100.0,
-            stiffness=1000.0,
-            damping=10.0,
+            effort_limit_sim=10000.0,
+            velocity_limit_sim=2.61,
+            stiffness=10000000.0,
+            damping=200.0,
         ),
     },
 )
