@@ -322,15 +322,40 @@ def main():
     # DOOR2_PRIM_PATH = "/World/Elevator/root/Elevator/ElevatorRig/Door2/Cube_025"
     # stage = omni.usd.get_context().get_stage()
     # door2_prim = stage.GetPrimAtPath(DOOR2_PRIM_PATH)
+    # Debug: Print all joint names to verify door2_joint exists
+    print(f"[DEBUG] All elevator joint names: {elevator.data.joint_names}")
+    print(f"[DEBUG] Total number of joints: {len(elevator.data.joint_names)}")
+    
+    # Debug: Print all body names
+    if hasattr(elevator.data, 'body_names'):
+        print(f"[DEBUG] All elevator body names: {elevator.data.body_names}")
+        print(f"[DEBUG] Total number of bodies: {len(elevator.data.body_names)}")
+    
     animate_elevator_joint_names = [ "door2_joint" ]
     animate_elevator_ids, _ = elevator.find_joints(animate_elevator_joint_names)
     animate_elevator_ids = torch.as_tensor(animate_elevator_ids, device=elevator.device, dtype=torch.long)
     if len(animate_elevator_ids) > 0:
-        print(f"[INFO] Found door2_joint at index {animate_elevator_ids[0].item()}")
-        print(f"[INFO] door2_joint default position: {elevator.data.default_joint_pos[0, animate_elevator_ids[0]].item():.6f}")
-        print(f"[INFO] door2_joint joint type: {elevator.data.joint_types[animate_elevator_ids[0]].item() if hasattr(elevator.data, 'joint_types') else 'N/A'}")
+        joint_idx = animate_elevator_ids[0].item()
+        print(f"[INFO] Found door2_joint at index {joint_idx}")
+        print(f"[INFO] door2_joint default position: {elevator.data.default_joint_pos[0, joint_idx].item():.6f}")
+        if hasattr(elevator.data, 'joint_types'):
+            print(f"[INFO] door2_joint joint type: {elevator.data.joint_types[joint_idx].item()}")
+        
+        # Try to find the child body index for door2_joint
+        # In Isaac Lab, joints have parent and child body indices
+        if hasattr(elevator.root_physx_view, 'get_dof_joint_parent_bodies'):
+            try:
+                # Get the child body index for this joint (DOF index)
+                # Note: joint_idx might be DOF index, need to check
+                print(f"[DEBUG] Attempting to check body properties for door2_joint...")
+            except Exception as e:
+                print(f"[DEBUG] Could not access body properties directly: {e}")
+        
+        # Check if joint is in actuator group by looking at actuator joint mapping
+        print(f"[DEBUG] Checking actuator connection for door2_joint...")
     else:
         print("[ERROR] door2_joint not found!")
+        print(f"[ERROR] Available joints: {list(elevator.data.joint_names)}")
     
     # Setup robot's joint_lift_body prismatic joint animation (for testing/reference)
     lift_body_joint_names = ["joint_lift_body"]
@@ -359,6 +384,87 @@ def main():
     lift_body_range = 0.2  # Range for joint_lift_body animation (meters)
 
     print("[INFO] Done. Close the window to exit.")
+    
+    # Do one update to ensure data is populated, then check body properties
+    scene.update(sim.get_physics_dt())
+    
+    # Check door2 body structure - specifically look for nested Xform issue
+    if len(animate_elevator_ids) > 0:
+        print(f"[DEBUG] Checking door2 body structure for nested Xform issue...")
+        try:
+            from pxr import UsdPhysics
+            stage = omni.usd.get_context().get_stage()
+            
+            # Check parent Xform (Door2)
+            door2_xform_path = "/World/Elevator/root/Elevator/ElevatorRig/Door2"
+            door2_prim = stage.GetPrimAtPath(door2_xform_path)
+            
+            if door2_prim.IsValid():
+                print(f"[DEBUG] Found Door2 Xform at: {door2_xform_path}")
+                
+                # Check for RigidBodyAPI on parent Xform
+                door2_rigid_body_api = UsdPhysics.RigidBodyAPI(door2_prim)
+                door2_has_rigid_body = door2_rigid_body_api is not None
+                print(f"[INFO] Door2 Xform has RigidBodyAPI: {door2_has_rigid_body}")
+                
+                if door2_has_rigid_body:
+                    # Check kinematic status
+                    if door2_prim.HasAttribute("physics:kinematicEnabled"):
+                        is_kinematic = door2_prim.GetAttribute("physics:kinematicEnabled").Get()
+                        print(f"[INFO] Door2 Xform - physics:kinematicEnabled = {is_kinematic}")
+                        if is_kinematic:
+                            print(f"[WARNING] Door2 Xform is KINEMATIC! This prevents joint forces from moving it.")
+                
+                # Check children (should include Cube_025)
+                print(f"[DEBUG] Checking children of Door2 Xform...")
+                cube_prim = None
+                for child in door2_prim.GetChildren():
+                    child_path = child.GetPath()
+                    print(f"[DEBUG]   Child: {child_path}")
+                    if "Cube_025" in str(child_path) or "cube" in str(child_path).lower():
+                        cube_prim = child
+                
+                # Check Cube_025 mesh specifically
+                cube_mesh_path = "/World/Elevator/root/Elevator/ElevatorRig/Door2/Cube_025"
+                if cube_prim is None:
+                    cube_prim = stage.GetPrimAtPath(cube_mesh_path)
+                
+                if cube_prim and cube_prim.IsValid():
+                    print(f"[DEBUG] Found Cube_025 mesh at: {cube_prim.GetPath()}")
+                    
+                    # Check for CollisionAPI on child mesh
+                    cube_collision_api = UsdPhysics.CollisionAPI(cube_prim)
+                    cube_has_collider = cube_collision_api is not None
+                    print(f"[INFO] Cube_025 has CollisionAPI: {cube_has_collider}")
+                    
+                    # Check if Cube_025 also has RigidBodyAPI
+                    cube_rigid_body_api = UsdPhysics.RigidBodyAPI(cube_prim)
+                    cube_has_rigid_body = cube_rigid_body_api is not None
+                    print(f"[INFO] Cube_025 has RigidBodyAPI: {cube_has_rigid_body}")
+                    
+                    # DIAGNOSIS: Check for nested Xform issue
+                    if door2_has_rigid_body and cube_has_collider and not cube_has_rigid_body:
+                        print(f"\n[WARNING] ===== NESTED XFORM ISSUE DETECTED =====")
+                        print(f"[WARNING] RigidBodyAPI is on parent Xform (Door2)")
+                        print(f"[WARNING] CollisionAPI is on child mesh (Cube_025)")
+                        print(f"[WARNING] This structure can cause physics problems!")
+                        print(f"[WARNING] ============================================\n")
+                        print(f"[SOLUTION] Option 1: Move RigidBodyAPI from Door2 Xform to Cube_025")
+                        print(f"[SOLUTION] Option 2: Move CollisionAPI from Cube_025 to Door2 Xform")
+                        print(f"[SOLUTION] Option 3: Ensure the joint is connected to the correct body")
+                        print(f"[SOLUTION]       (The joint's child body should match where RigidBodyAPI is)")
+                else:
+                    print(f"[WARNING] Could not find Cube_025 mesh")
+            else:
+                print(f"[WARNING] Could not find Door2 Xform at {door2_xform_path}")
+                
+        except ImportError:
+            print(f"[DEBUG] Could not import UsdPhysics")
+        except Exception as e:
+            print(f"[DEBUG] Could not check USD prim properties: {e}")
+            import traceback
+            traceback.print_exc()
+    
     while simulation_app.is_running():
         # Reset robot to default positions at the start of each period to maintain symmetry
         if count % period == 0:
@@ -424,7 +530,12 @@ def main():
             actual_vel = elevator.data.joint_vel[:, animate_elevator_ids]
             target_pos = joint_pos_target[:, animate_elevator_ids]
             
-            print(f"[door2] target: {target_pos[0, 0].item():.6f}, actual: {actual_pos[0, 0].item():.6f}, vel: {actual_vel[0, 0].item():.6f}, diff: {(target_pos[0, 0] - actual_pos[0, 0]).item():.6f}")
+            # Try to read the target from articulation data if available
+            if hasattr(elevator.data, 'joint_pos_target'):
+                read_target = elevator.data.joint_pos_target[:, animate_elevator_ids]
+                print(f"[door2] target (set): {target_pos[0, 0].item():.6f}, target (read): {read_target[0, 0].item():.6f}, actual: {actual_pos[0, 0].item():.6f}, vel: {actual_vel[0, 0].item():.6f}, diff: {(target_pos[0, 0] - actual_pos[0, 0]).item():.6f}")
+            else:
+                print(f"[door2] target: {target_pos[0, 0].item():.6f}, actual: {actual_pos[0, 0].item():.6f}, vel: {actual_vel[0, 0].item():.6f}, diff: {(target_pos[0, 0] - actual_pos[0, 0]).item():.6f}")
             
             # Also print joint limits to see if we're hitting them
             joint_limits_lower = elevator.data.soft_joint_pos_limits[0, animate_elevator_ids, 0]
