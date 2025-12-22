@@ -69,7 +69,7 @@ ELEVATOR_CFG = ArticulationCfg(
             joint_names_expr=["door[1-2]_joint"],
             effort_limit_sim=400.0,
             velocity_limit_sim=100.0,
-            stiffness=0.0,
+            stiffness=1000.0,
             damping=10.0,
         ),
     },
