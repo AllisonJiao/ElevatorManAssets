@@ -234,7 +234,89 @@ def set_robot_pose_demo(
     agibot.set_joint_position_target(joint_pos_target)
     agibot.write_data_to_sim()
 
+
+def run_simulator(
+    sim: sim_utils.SimulationContext,
+    scene: InteractiveScene,
+    agibot: Articulation,
+    elevator: Articulation,
+    left_joint_groups: dict[str, torch.Tensor],
+    right_joint_groups: dict[str, torch.Tensor],
+    cached_symmetric_refs: dict[str, torch.Tensor],
+    cached_symmetric_ref_all: torch.Tensor,
+    animate_elevator_ids: torch.Tensor,
+    lift_body_joint_ids: torch.Tensor,
+    robot_animation_range: float,
+    lift_body_range: float,
+):
+    """Run the simulation loop with robot and elevator animations."""
+    # Animation parameters
+    count = 0
+    period = 500
+    open_delta = -0.5  # 50 cm along chosen axis
+    close_delta = 0.0
+
+    print("[INFO] Done. Close the window to exit.")
+
+    while simulation_app.is_running():
+        # Reset robot to default positions at the start of each period to maintain symmetry
+        if count % period == 0:
+            # Reset joint positions to default
+            agibot.write_joint_state_to_sim(
+                agibot.data.default_joint_pos.clone(),
+                agibot.data.default_joint_vel.clone()
+            )
+            agibot.reset()
+            count = 0
+
+        # Calculate phase for animations
+        phase = count % period
+        alpha = phase / max(1, period - 1)  # Normalized phase [0, 1]
+
+        # Calculate door animation delta based on phase
+        if phase < 100:        # opening
+            t = phase / 99.0
+            delta = close_delta + t * (open_delta - close_delta)
+        elif phase < 400:      # hold open
+            delta = open_delta
+        else:                  # closing
+            t = (phase - 400) / 99.0
+            delta = open_delta + t * (close_delta - open_delta)
+
+        # Update door position using joint-based animation
+        joint_pos_target = elevator.data.default_joint_pos.clone()
+        joint_pos_target[:, animate_elevator_ids] += delta
+        joint_pos_target = joint_pos_target.clamp_(
+            elevator.data.soft_joint_pos_limits[..., 0], elevator.data.soft_joint_pos_limits[..., 1]
+        )
+        elevator.set_joint_position_target(joint_pos_target)
+        elevator.write_data_to_sim()
+
+        # Calculate lift_body animation target (same phase-based pattern as door)
+        lift_body_target = None
+        if len(lift_body_joint_ids) > 0:
+            # Apply lift_body animation: default position + scaled delta (same pattern as door)
+            lift_body_target = agibot.data.default_joint_pos[:, lift_body_joint_ids] + (delta * lift_body_range)
+
+        # Update robot pose using phase-based animation (with sequential linkage movement)
+        # This includes both arm animation and lift_body animation, set together to avoid overwriting
+        set_robot_pose_demo(
+            agibot, alpha, left_joint_groups, right_joint_groups, robot_animation_range,
+            sequential=not args_cli.simultaneous_arms, sequential_linkages=True,
+            cached_symmetric_refs=cached_symmetric_refs,
+            cached_symmetric_ref_all=cached_symmetric_ref_all,
+            lift_body_joint_ids=lift_body_joint_ids if len(lift_body_joint_ids) > 0 else None,
+            lift_body_target=lift_body_target
+        )
+
+        sim.step()
+        scene.update(sim.get_physics_dt())
+
+        count += 1
+
+
 def main():
+    """Main function."""
     sim_cfg = sim_utils.SimulationCfg(device=args_cli.device)
     sim = sim_utils.SimulationContext(sim_cfg)
 
@@ -253,20 +335,20 @@ def main():
     left_shoulder_names = ["left_arm_joint1", "left_arm_joint2", "left_arm_joint3"]
     left_forearm_names = ["left_arm_joint4", "left_arm_joint5"]
     left_gripper_names = ["left_arm_joint6", "left_arm_joint7"]
-    
+
     right_shoulder_names = ["right_arm_joint1", "right_arm_joint2", "right_arm_joint3"]
     right_forearm_names = ["right_arm_joint4", "right_arm_joint5"]
     right_gripper_names = ["right_arm_joint6", "right_arm_joint7"]
-    
+
     # Find joint indices for each group
     left_shoulder_ids, _ = agibot.find_joints(left_shoulder_names)
     left_forearm_ids, _ = agibot.find_joints(left_forearm_names)
     left_gripper_ids, _ = agibot.find_joints(left_gripper_names)
-    
+
     right_shoulder_ids, _ = agibot.find_joints(right_shoulder_names)
     right_forearm_ids, _ = agibot.find_joints(right_forearm_names)
     right_gripper_ids, _ = agibot.find_joints(right_gripper_names)
-    
+
     # Organize into groups
     left_joint_groups = {
         "shoulder": torch.as_tensor(left_shoulder_ids, device=agibot.device, dtype=torch.long),
@@ -278,18 +360,18 @@ def main():
         "forearm": torch.as_tensor(right_forearm_ids, device=agibot.device, dtype=torch.long),
         "gripper": torch.as_tensor(right_gripper_ids, device=agibot.device, dtype=torch.long),
     }
-    
+
     total_left = sum(len(ids) for ids in left_joint_groups.values())
     total_right = sum(len(ids) for ids in right_joint_groups.values())
-    
+
     if total_left > 0 or total_right > 0:
         print(f"[INFO] Organized arm joints into groups:")
         print(f"  Left arm - Shoulder: {len(left_joint_groups['shoulder'])}, Forearm: {len(left_joint_groups['forearm'])}, Gripper: {len(left_joint_groups['gripper'])}")
         print(f"  Right arm - Shoulder: {len(right_joint_groups['shoulder'])}, Forearm: {len(right_joint_groups['forearm'])}, Gripper: {len(right_joint_groups['gripper'])}")
-        
-        # Debug: Check default positions for symmetry
-        scene.update(sim.get_physics_dt())  # Ensure data is updated
-        
+
+        # Ensure data is updated
+        scene.update(sim.get_physics_dt())
+
         # Cache symmetric reference positions once (computed from default positions)
         # This ensures consistent symmetry across all animation cycles
         group_names = list(left_joint_groups.keys())
@@ -309,84 +391,28 @@ def main():
         right_joint_groups = {}
         cached_symmetric_refs = {}
         cached_symmetric_ref_all = None
-        all_left_ids = torch.tensor([], device=agibot.device, dtype=torch.long)
-        all_right_ids = torch.tensor([], device=agibot.device, dtype=torch.long)
         print("[WARN] No arm joints found for animation. Robot will use default pose.")
 
-    animate_elevator_joint_names = [ "door2_joint" ]
+    animate_elevator_joint_names = ["door2_joint"]
     animate_elevator_ids, _ = elevator.find_joints(animate_elevator_joint_names)
     animate_elevator_ids = torch.as_tensor(animate_elevator_ids, device=elevator.device, dtype=torch.long)
-    
+
     # Setup robot's joint_lift_body prismatic joint animation (for testing/reference)
     lift_body_joint_names = ["joint_lift_body"]
     lift_body_joint_ids, _ = agibot.find_joints(lift_body_joint_names)
     lift_body_joint_ids = torch.as_tensor(lift_body_joint_ids, device=agibot.device, dtype=torch.long)
 
-    # Animation parameters
-    count = 0
-    period = 500
-    open_delta = -0.5  # 50 cm along chosen axis
-    close_delta = 0.0
     robot_animation_range = args_cli.robot_animation_range
     lift_body_range = 0.2  # Range for joint_lift_body animation (meters)
 
-    print("[INFO] Done. Close the window to exit.")
-    
-    while simulation_app.is_running():
-        # Reset robot to default positions at the start of each period to maintain symmetry
-        if count % period == 0:
-            # Reset joint positions to default
-            agibot.write_joint_state_to_sim(
-                agibot.data.default_joint_pos.clone(),
-                agibot.data.default_joint_vel.clone()
-            )
-            agibot.reset()
-            count = 0
-        
-        # Calculate phase for animations
-        phase = count % period
-        alpha = phase / max(1, period - 1)  # Normalized phase [0, 1]
-        
-        # Calculate door animation delta based on phase
-        if phase < 100:        # opening
-            t = phase / 99.0
-            delta = close_delta + t * (open_delta - close_delta)
-        elif phase < 400:      # hold open
-            delta = open_delta
-        else:                  # closing
-            t = (phase - 400) / 99.0
-            delta = open_delta + t * (close_delta - open_delta)
-
-        # Update door position using joint-based animation
-        joint_pos_target = elevator.data.default_joint_pos.clone()
-        joint_pos_target[:, animate_elevator_ids] += delta
-        joint_pos_target = joint_pos_target.clamp_(
-            elevator.data.soft_joint_pos_limits[..., 0], elevator.data.soft_joint_pos_limits[..., 1]
-        )
-        elevator.set_joint_position_target(joint_pos_target)
-        elevator.write_data_to_sim()
-        
-        # Calculate lift_body animation target (same phase-based pattern as door)
-        lift_body_target = None
-        if len(lift_body_joint_ids) > 0:
-            # Apply lift_body animation: default position + scaled delta (same pattern as door)
-            lift_body_target = agibot.data.default_joint_pos[:, lift_body_joint_ids] + (delta * lift_body_range)
-        
-        # Update robot pose using phase-based animation (with sequential linkage movement)
-        # This includes both arm animation and lift_body animation, set together to avoid overwriting
-        set_robot_pose_demo(
-            agibot, alpha, left_joint_groups, right_joint_groups, robot_animation_range, 
-            sequential=not args_cli.simultaneous_arms, sequential_linkages=True,
-            cached_symmetric_refs=cached_symmetric_refs,
-            cached_symmetric_ref_all=cached_symmetric_ref_all,
-            lift_body_joint_ids=lift_body_joint_ids if len(lift_body_joint_ids) > 0 else None,
-            lift_body_target=lift_body_target
-        )
-        
-        sim.step()
-        scene.update(sim.get_physics_dt())
-        
-        count += 1
+    # Run the simulator
+    run_simulator(
+        sim, scene, agibot, elevator,
+        left_joint_groups, right_joint_groups,
+        cached_symmetric_refs, cached_symmetric_ref_all,
+        animate_elevator_ids, lift_body_joint_ids,
+        robot_animation_range, lift_body_range
+    )
 
     simulation_app.close()
 
