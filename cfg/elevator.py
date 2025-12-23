@@ -16,7 +16,7 @@ import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets.articulation import ArticulationCfg
 
-ELEVATOR_ASSET_PATH = "ElevatorManAssets/assets/elevator/elevator.usd"
+ELEVATOR_ASSET_PATH = "ElevatorManAssets/assets/Collected_elevator_urdf/elevator.usd"
 
 ##
 # Configuration
