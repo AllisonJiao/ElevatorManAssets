@@ -31,6 +31,23 @@ from isaaclab.sim import SimulationContext
 from cfg.agibot import AGIBOT_A2D_CFG
 from cfg.elevator import ELEVATOR_CFG
 
+from omni.usd import get_context
+from pxr import Usd, UsdPhysics, PhysxSchema
+
+def print_articulation_roots():
+    stage = get_context().get_stage()
+    roots = []
+    for prim in stage.Traverse():
+        # check both USD and PhysX articulation root APIs (either could be used depending on authoring)
+        has_usd = prim.HasAPI(UsdPhysics.ArticulationRootAPI)
+        has_physx = prim.HasAPI(PhysxSchema.PhysxArticulationRootAPI)
+        if has_usd or has_physx:
+            roots.append((str(prim.GetPath()), has_usd, has_physx, prim.GetTypeName()))
+    print("\n[DEBUG] Articulation root prims found:")
+    for p, u, x, t in roots:
+        print(f"  - {p}  type={t}  UsdPhysics={u}  Physx={x}")
+    print()
+
 def design_scene() -> tuple[dict]:
     """Designs the scene."""
 
@@ -72,9 +89,9 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
     animate_agibot_ids, _ = agibot.find_joints(animate_agibot_joint_names)
     animate_agibot_ids = torch.as_tensor(animate_agibot_ids, device=agibot.device, dtype=torch.long)
 
-    animate_elevator_joint_names = [ "door2_joint" ]
-    animate_elevator_ids, _ = elevator.find_joints(animate_elevator_joint_names)
-    animate_elevator_ids = torch.as_tensor(animate_elevator_ids, device=elevator.device, dtype=torch.long)
+    # animate_elevator_joint_names = [ "door2_joint" ]
+    # animate_elevator_ids, _ = elevator.find_joints(animate_elevator_joint_names)
+    # animate_elevator_ids = torch.as_tensor(animate_elevator_ids, device=elevator.device, dtype=torch.long)
 
     sim_dt = sim.get_physics_dt()
     count = 0
@@ -118,30 +135,34 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
         )
         agibot.set_joint_position_target(joint_pos_target)
 
+        print("ELEVATOR JOINTS:", elevator.data.joint_names)
+
         # control elevator doors
-        joint_pos_target = elevator.data.default_joint_pos.clone()
-        joint_pos_target[:, animate_elevator_ids] += target
-        joint_pos_target = joint_pos_target.clamp_(
-            elevator.data.soft_joint_pos_limits[..., 0], elevator.data.soft_joint_pos_limits[..., 1]
-        )
-        print("door2 target:", joint_pos_target[0, animate_elevator_ids].item())
-        elevator.set_joint_position_target(joint_pos_target)
+        # joint_pos_target = elevator.data.default_joint_pos.clone()
+        # joint_pos_target[:, animate_elevator_ids] += delta
+        # joint_pos_target = joint_pos_target.clamp_(
+        #     elevator.data.soft_joint_pos_limits[..., 0], elevator.data.soft_joint_pos_limits[..., 1]
+        # )
+        # print("door2 target:", joint_pos_target[0, animate_elevator_ids].item())
+        # elevator.set_joint_position_target(joint_pos_target)
 
         # write to sim
         agibot.write_data_to_sim()
-        elevator.write_data_to_sim()
+        # elevator.write_data_to_sim()
 
         sim.step()
         count += 1
 
         agibot.update(sim_dt)
-        elevator.update(sim_dt)
+        # elevator.update(sim_dt)
 
 def main():
     """Main function."""
     # Load kit helper
     sim_cfg = sim_utils.SimulationCfg(device=args_cli.device)
     sim = SimulationContext(sim_cfg)
+    # In main(), after sim = SimulationContext(sim_cfg):
+    print_articulation_roots()
     # Set main camera
     sim.set_camera_view([2.5, 0.0, 4.0], [0.0, 0.0, 2.0])
     # Design scene
