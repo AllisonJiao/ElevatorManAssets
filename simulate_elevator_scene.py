@@ -32,23 +32,30 @@ from cfg.agibot import AGIBOT_A2D_CFG
 from cfg.elevator import ELEVATOR_CFG
 
 from omni.usd import get_context
-from pxr import Usd, UsdPhysics, PhysxSchema
+from pxr import UsdPhysics, PhysxSchema
 
 def print_articulation_roots():
     stage = get_context().get_stage()
     roots = []
+
     for prim in stage.Traverse():
-        # check both USD and PhysX articulation root APIs (either could be used depending on authoring)
+        # USD articulation root (often used)
         has_usd = prim.HasAPI(UsdPhysics.ArticulationRootAPI)
-        has_physx = prim.HasAPI(PhysxSchema.PhysxArticulationRootAPI)
+
+        # PhysX articulation API (your build exposes this)
+        has_physx = prim.HasAPI(PhysxSchema.PhysxArticulationAPI)
+
         if has_usd or has_physx:
             roots.append((str(prim.GetPath()), has_usd, has_physx, prim.GetTypeName()))
-    print("\n[DEBUG] Articulation root prims found:")
+
+    print("\n[DEBUG] Articulation(-root) prims found:")
+    if not roots:
+        print("  (none)")
     for p, u, x, t in roots:
-        print(f"  - {p}  type={t}  UsdPhysics={u}  Physx={x}")
+        print(f"  - {p}  type={t}  UsdPhysics.ArticulationRootAPI={u}  PhysxSchema.PhysxArticulationAPI={x}")
     print()
 
-def design_scene() -> tuple[dict]:
+def design_scene() -> dict[str, Articulation]:
     """Designs the scene."""
 
     # Ground-plane
@@ -135,8 +142,6 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
         )
         agibot.set_joint_position_target(joint_pos_target)
 
-        print("ELEVATOR JOINTS:", elevator.data.joint_names)
-
         # control elevator doors
         # joint_pos_target = elevator.data.default_joint_pos.clone()
         # joint_pos_target[:, animate_elevator_ids] += delta
@@ -161,8 +166,7 @@ def main():
     # Load kit helper
     sim_cfg = sim_utils.SimulationCfg(device=args_cli.device)
     sim = SimulationContext(sim_cfg)
-    # In main(), after sim = SimulationContext(sim_cfg):
-    print_articulation_roots()
+    
     # Set main camera
     sim.set_camera_view([2.5, 0.0, 4.0], [0.0, 0.0, 2.0])
     # Design scene
@@ -170,6 +174,8 @@ def main():
     # scene_origins = torch.tensor(scene_origins, device=sim.device)
     # Play the simulator
     sim.reset()
+    print_articulation_roots()
+    print("ELEVATOR JOINTS:", scene_entities["elevator"].data.joint_names)
     # Now we are ready!
     print("[INFO]: Setup complete...")
     # Run the simulator
