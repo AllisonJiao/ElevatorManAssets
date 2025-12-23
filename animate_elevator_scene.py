@@ -276,13 +276,20 @@ def run_simulator(
             elevator.reset()
             
             count = 0
-
+        
         # Calculate phase for animations
         phase = count % period
-        alpha = phase / max(1, period - 1)  # Normalized phase [0, 1]
+        alpha = phase / max(1, period - 1)  # Normalized phase [0, 1] for robot animation
 
-        # Set door position directly to open_delta (simplified for testing)
-        delta = open_delta
+        # Calculate door animation delta based on phase
+        if phase < 100:        # opening (first 100 frames)
+            t = phase / 99.0
+            delta = close_delta + t * (open_delta - close_delta)
+        elif phase < 400:      # hold open (frames 100-399)
+            delta = open_delta
+        else:                  # closing (frames 400-499)
+            t = (phase - 400) / 99.0
+            delta = open_delta + t * (close_delta - open_delta)
 
         # Update door position using joint-based animation
         joint_pos_target = elevator.data.default_joint_pos.clone()
