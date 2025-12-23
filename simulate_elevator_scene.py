@@ -125,19 +125,18 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
         )
         agibot.set_joint_position_target(joint_pos_target)
 
-        # --------------------------------------------------
-        # Drive door — NO clamping (debug mode)
-        # --------------------------------------------------
-        joint_pos_target = elevator.data.default_joint_pos.clone()
-        joint_pos_target[:, door2_id] = delta
+        # --- DOOR: teleport joint state (debug, guaranteed to move) ---
+        joint_pos = elevator.data.joint_pos.clone()
+        joint_vel = elevator.data.joint_vel.clone()
 
-        print(f"[DEBUG] door2 target = {delta:.3f}")
+        joint_pos[:, door2_id] = delta
+        joint_vel[:, door2_id] = 0.0
 
-        elevator.set_joint_position_target(joint_pos_target)
+        elevator.write_joint_state_to_sim(joint_pos, joint_vel)
 
         # write to sim
         agibot.write_data_to_sim()
-        elevator.write_data_to_sim()
+        # elevator.write_data_to_sim()
 
         sim.step()
         count += 1
