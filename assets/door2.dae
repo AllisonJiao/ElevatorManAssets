@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <asset>
+    <contributor>
+      <author>Blender User</author>
+      <authoring_tool>Blender 4.3.2 commit date:2024-12-16, commit time:21:10, hash:32f5fdce0a0a</authoring_tool>
+    </contributor>
+    <created>2025-12-22T19:36:58</created>
+    <modified>2025-12-22T19:36:58</modified>
+    <unit name="meter" meter="1"/>
+    <up_axis>Z_UP</up_axis>
+  </asset>
+  <library_effects>
+    <effect id="ElevatorMetal-effect">
+      <profile_COMMON>
+        <technique sid="common">
+          <lambert>
+            <emission>
+              <color sid="emission">0 0 0 1</color>
+            </emission>
+            <diffuse>
+              <color sid="diffuse">0.4778512 0.4778512 0.4778512 1</color>
+            </diffuse>
+            <reflectivity>
+              <float sid="specular">1</float>
+            </reflectivity>
+            <index_of_refraction>
+              <float sid="ior">1.5</float>
+            </index_of_refraction>
+          </lambert>
+        </technique>
+      </profile_COMMON>
+    </effect>
+  </library_effects>
+  <library_images/>
+  <library_materials>
+    <material id="ElevatorMetal-material" name="ElevatorMetal">
+      <instance_effect url="#ElevatorMetal-effect"/>
+    </material>
+  </library_materials>
+  <library_geometries>
+    <geometry id="Cube_025-mesh" name="Cube_025">
+      <mesh>
+        <source id="Cube_025-mesh-positions">
+          <float_array id="Cube_025-mesh-positions-array" count="48">-0.7101085 -0.06809461 -1.399595 -0.7101085 -0.06809461 1.399595 -0.7101085 0.06809461 -1.399595 -0.7101085 0.06809461 1.399595 0.2435598 -0.05218362 -1.383684 0.2276489 -0.06809461 -1.399595 0.2388997 -0.06343448 -1.394935 0.2276489 -0.06809461 1.399595 0.2435598 -0.05218362 1.383684 0.2388997 -0.06343436 1.394935 0.2435598 0.05218362 -1.383684 0.2276489 0.06809461 -1.399595 0.2388997 0.06343442 -1.394935 0.2435598 0.05218362 1.383684 0.2276489 0.06809461 1.399595 0.2388997 0.0634343 1.394935</float_array>
+          <technique_common>
+            <accessor source="#Cube_025-mesh-positions-array" count="16" stride="3">
+              <param name="X" type="float"/>
+              <param name="Y" type="float"/>
+              <param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <source id="Cube_025-mesh-normals">
+          <float_array id="Cube_025-mesh-normals-array" count="66">-1 0 0 0 -1 0 0 0 1 1 0 0 0 1 0 0.9238791 0.3826846 0 0.3826882 0.9238776 0 0.382688 0 -0.9238777 0.9238806 0 -0.3826807 0.3826978 0 0.9238736 0.9238805 0 0.3826814 0.3826824 -0.9238801 0 0.9238806 -0.382681 0 0 0 -1 0.9238808 0.3826805 0 0.3826785 0.9238816 0 0.38267 0 -0.9238852 0.9238805 0 -0.3826814 0.382705 0 0.9238706 0.9238784 0 0.3826861 0.382676 -0.9238826 0 0.9238807 -0.3826807 0</float_array>
+          <technique_common>
+            <accessor source="#Cube_025-mesh-normals-array" count="22" stride="3">
+              <param name="X" type="float"/>
+              <param name="Y" type="float"/>
+              <param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <source id="Cube_025-mesh-map-0">
+          <float_array id="Cube_025-mesh-map-0-array" count="168">0.625 0 0.375 0.25 0.375 0 0.6250001 0.754171 0.375 1 0.375 0.754171 0.875 0.5 0.629171 0.75 0.629171 0.5 0.6235789 0.5292075 0.376421 0.7207924 0.376421 0.5292076 0.625 0.25 0.375 0.495829 0.375 0.25 0.376421 0.5292076 0.6245838 0.5 0.6235789 0.5292075 0.3754162 0.5 0.625 0.495829 0.6245838 0.5 0.370829 0.75 0.375 0.5085546 0.375 0.7414454 0.375 0.5085546 0.376421 0.7207924 0.375 0.7414454 0.629171 0.75 0.625 0.5085548 0.629171 0.5 0.625 0.5085548 0.623579 0.7207924 0.6235789 0.5292075 0.375 0.754171 0.6245838 0.75 0.6250001 0.754171 0.3754162 0.75 0.623579 0.7207924 0.6245838 0.75 0.370829 0.5 0.125 0.75 0.125 0.5 0.625 0 0.625 0.25 0.375 0.25 0.6250001 0.754171 0.625 1 0.375 1 0.875 0.5 0.875 0.75 0.629171 0.75 0.6235789 0.5292075 0.623579 0.7207924 0.376421 0.7207924 0.625 0.25 0.625 0.495829 0.375 0.495829 0.376421 0.5292076 0.3754162 0.5 0.6245838 0.5 0.3754162 0.5 0.375 0.495829 0.625 0.495829 0.370829 0.75 0.370829 0.5 0.375 0.5085546 0.375 0.5085546 0.376421 0.5292076 0.376421 0.7207924 0.629171 0.75 0.625 0.7414451 0.625 0.5085548 0.625 0.5085548 0.625 0.7414451 0.623579 0.7207924 0.375 0.754171 0.3754162 0.75 0.6245838 0.75 0.3754162 0.75 0.376421 0.7207924 0.623579 0.7207924 0.370829 0.5 0.370829 0.75 0.125 0.75</float_array>
+          <technique_common>
+            <accessor source="#Cube_025-mesh-map-0-array" count="84" stride="2">
+              <param name="S" type="float"/>
+              <param name="T" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <vertices id="Cube_025-mesh-vertices">
+          <input semantic="POSITION" source="#Cube_025-mesh-positions"/>
+        </vertices>
+        <triangles material="ElevatorMetal-material" count="28">
+          <input semantic="VERTEX" source="#Cube_025-mesh-vertices" offset="0"/>
+          <input semantic="NORMAL" source="#Cube_025-mesh-normals" offset="1"/>
+          <input semantic="TEXCOORD" source="#Cube_025-mesh-map-0" offset="2" set="0"/>
+          <p>1 0 0 2 0 1 0 0 2 7 1 3 0 1 4 5 1 5 3 2 6 7 2 7 14 2 8 13 3 9 4 3 10 10 3 11 3 4 12 11 4 13 2 4 14 10 5 15 15 5 16 13 5 17 12 6 18 14 6 19 15 6 20 5 7 21 12 7 22 6 7 23 12 8 24 4 8 25 6 8 26 7 9 27 15 9 28 14 9 29 15 10 30 8 10 31 13 10 32 5 11 33 9 11 34 7 11 35 6 12 36 8 12 37 9 12 38 11 13 39 0 13 40 2 13 41 1 0 42 3 0 43 2 0 44 7 1 45 1 1 46 0 1 47 3 2 48 1 2 49 7 2 50 13 3 51 8 3 52 4 3 53 3 4 54 14 4 55 11 4 56 10 14 57 12 14 58 15 14 59 12 15 60 11 15 61 14 15 62 5 16 63 11 16 64 12 16 65 12 17 66 10 17 67 4 17 68 7 18 69 9 18 70 15 18 71 15 19 72 9 19 73 8 19 74 5 20 75 6 20 76 9 20 77 6 21 78 4 21 79 8 21 80 11 13 81 5 13 82 0 13 83</p>
+        </triangles>
+      </mesh>
+    </geometry>
+  </library_geometries>
+  <library_visual_scenes>
+    <visual_scene id="Scene" name="Scene">
+      <node id="Cube_025" name="Cube_025" type="NODE">
+        <matrix sid="transform">1 0 0 0.7357346 0 1 1.62921e-7 -1.054467 0 -1.62921e-7 1 1.367168 0 0 0 1</matrix>
+        <instance_geometry url="#Cube_025-mesh" name="Cube_025">
+          <bind_material>
+            <technique_common>
+              <instance_material symbol="ElevatorMetal-material" target="#ElevatorMetal-material">
+                <bind_vertex_input semantic="st" input_semantic="TEXCOORD" input_set="0"/>
+              </instance_material>
+            </technique_common>
+          </bind_material>
+        </instance_geometry>
+      </node>
+    </visual_scene>
+  </library_visual_scenes>
+  <scene>
+    <instance_visual_scene url="#Scene"/>
+  </scene>
+</COLLADA>
