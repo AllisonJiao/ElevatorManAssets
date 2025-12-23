@@ -29,7 +29,7 @@
   <!-- =========================
        Buttons (static collision)
        ========================= -->
-  <link name="button_0_0_link>">
+  <link name="button_0_0_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
@@ -61,7 +61,7 @@
     <limit lower="0.0" upper="0.01" effort="20" velocity="0.2"/>
   </joint>
 
-  <link name="button_0_1_link>">
+  <link name="button_0_1_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
@@ -93,7 +93,7 @@
     <limit lower="0.0" upper="0.01" effort="20" velocity="0.2"/>
   </joint>
 
-  <link name="button_1_0_link>">
+  <link name="button_1_0_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
@@ -125,7 +125,7 @@
     <limit lower="0.0" upper="0.01" effort="20" velocity="0.2"/>
   </joint>
 
-  <link name="button_1_1_link>">
+  <link name="button_1_1_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
@@ -157,7 +157,7 @@
     <limit lower="0.0" upper="0.01" effort="20" velocity="0.2"/>
   </joint>
 
-  <link name="button_2_0_link>">
+  <link name="button_2_0_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
@@ -189,7 +189,7 @@
     <limit lower="0.0" upper="0.01" effort="20" velocity="0.2"/>
   </joint>
 
-  <link name="button_2_1_link>">
+  <link name="button_2_1_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
@@ -221,7 +221,7 @@
     <limit lower="0.0" upper="0.01" effort="20" velocity="0.2"/>
   </joint>
 
-  <link name="button_3_0_link>">
+  <link name="button_3_0_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
@@ -253,7 +253,7 @@
     <limit lower="0.0" upper="0.01" effort="20" velocity="0.2"/>
   </joint>
 
-  <link name="button_3_1_link>">
+  <link name="button_3_1_link">
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
