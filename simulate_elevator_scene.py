@@ -68,7 +68,7 @@ def design_scene() -> dict[str, Articulation]:
 
     # Elevator
     elevator_cfg = ELEVATOR_CFG.copy()
-    elevator_cfg.prim_path = "/World/Elevator/root"
+    elevator_cfg.prim_path = "/World/root"
     elevator = Articulation(cfg = elevator_cfg)
 
     # Origin(s)
