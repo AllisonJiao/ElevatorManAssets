@@ -129,9 +129,9 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
         # Drive door — NO clamping (debug mode)
         # --------------------------------------------------
         joint_pos_target = elevator.data.default_joint_pos.clone()
-        joint_pos_target[:, door2_id] = door_target
+        joint_pos_target[:, door2_id] = delta
 
-        print(f"[DEBUG] door2 target = {door_target:.3f}")
+        print(f"[DEBUG] door2 target = {delta:.3f}")
 
         elevator.set_joint_position_target(joint_pos_target)
 
