@@ -284,14 +284,29 @@ def run_simulator(
         # Set door position directly to open_delta (simplified for testing)
         delta = open_delta
 
-        # Update door position using joint-based animation
-        joint_pos_target = elevator.data.default_joint_pos.clone()
-        joint_pos_target[:, animate_elevator_ids] += delta
-        joint_pos_target = joint_pos_target.clamp_(
-            elevator.data.soft_joint_pos_limits[..., 0], elevator.data.soft_joint_pos_limits[..., 1]
+        # Alternative method: Direct joint state writing (bypasses actuator PD controller)
+        # This directly sets the joint position in physics each frame, bypassing the actuator system
+        # Note: This is called BEFORE sim.step() so it takes effect in the next physics step
+        joint_pos = elevator.data.joint_pos.clone()
+        joint_vel = elevator.data.joint_vel.clone()
+        joint_pos[:, animate_elevator_ids] = elevator.data.default_joint_pos[:, animate_elevator_ids] + delta
+        joint_pos[:, animate_elevator_ids] = joint_pos[:, animate_elevator_ids].clamp_(
+            elevator.data.soft_joint_pos_limits[0, animate_elevator_ids, 0],
+            elevator.data.soft_joint_pos_limits[0, animate_elevator_ids, 1]
         )
-        elevator.set_joint_position_target(joint_pos_target)
-        elevator.write_data_to_sim()
+        # Set velocity to zero for stable positioning
+        joint_vel[:, animate_elevator_ids] = 0.0
+        elevator.write_joint_state_to_sim(joint_pos, joint_vel)
+        
+        # Original method (commented out): Using position target with actuator PD controller
+        # This requires the actuator to have proper stiffness/damping and the joint body to be dynamic
+        # joint_pos_target = elevator.data.default_joint_pos.clone()
+        # joint_pos_target[:, animate_elevator_ids] += delta
+        # joint_pos_target = joint_pos_target.clamp_(
+        #     elevator.data.soft_joint_pos_limits[..., 0], elevator.data.soft_joint_pos_limits[..., 1]
+        # )
+        # elevator.set_joint_position_target(joint_pos_target)
+        # elevator.write_data_to_sim()
 
         # Calculate lift_body animation target (same phase-based pattern as door)
         lift_body_target = None
