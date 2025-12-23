@@ -259,29 +259,30 @@ def run_simulator(
     print("[INFO] Done. Close the window to exit.")
 
     while simulation_app.is_running():
-        # Reset robot to default positions at the start of each period to maintain symmetry
+        # Reset robot and elevator to default positions at the start of each period
         if count % period == 0:
-            # Reset joint positions to default
+            # Reset robot joint positions to default
             agibot.write_joint_state_to_sim(
                 agibot.data.default_joint_pos.clone(),
                 agibot.data.default_joint_vel.clone()
             )
             agibot.reset()
+            
+            # Reset elevator door position to default (initial position)
+            elevator.write_joint_state_to_sim(
+                elevator.data.default_joint_pos.clone(),
+                elevator.data.default_joint_vel.clone()
+            )
+            elevator.reset()
+            
             count = 0
 
         # Calculate phase for animations
         phase = count % period
         alpha = phase / max(1, period - 1)  # Normalized phase [0, 1]
 
-        # Calculate door animation delta based on phase
-        if phase < 100:        # opening
-            t = phase / 99.0
-            delta = close_delta + t * (open_delta - close_delta)
-        elif phase < 400:      # hold open
-            delta = open_delta
-        else:                  # closing
-            t = (phase - 400) / 99.0
-            delta = open_delta + t * (close_delta - open_delta)
+        # Set door position directly to open_delta (simplified for testing)
+        delta = open_delta
 
         # Update door position using joint-based animation
         joint_pos_target = elevator.data.default_joint_pos.clone()
