@@ -16,7 +16,7 @@ import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets.articulation import ArticulationCfg
 
-ELEVATOR_ASSET_PATH = "ElevatorManAssets/assets/Collected_elevator_asset_tmp/elevator_asset.usdc"
+ELEVATOR_ASSET_PATH = "ElevatorManAssets/assets/Collected_elevator_edit/elevator_edit.usdc"
 
 ##
 # Configuration
@@ -42,31 +42,31 @@ ELEVATOR_CFG = ArticulationCfg(
     ),
     init_state=ArticulationCfg.InitialStateCfg(
         joint_pos={
-            "button_0_0_joint": 0.0,
-            "button_0_1_joint": 0.0,
-            "button_1_0_joint": 0.0,
-            "button_1_1_joint": 0.0,
-            "button_2_0_joint": 0.0,
-            "button_2_1_joint": 0.0,
-            "button_3_0_joint": 0.0,
-            "button_3_1_joint": 0.0,
-            "door1_joint": 0.0,
+            # "button_0_0_joint": 0.0,
+            # "button_0_1_joint": 0.0,
+            # "button_1_0_joint": 0.0,
+            # "button_1_1_joint": 0.0,
+            # "button_2_0_joint": 0.0,
+            # "button_2_1_joint": 0.0,
+            # "button_3_0_joint": 0.0,
+            # "button_3_1_joint": 0.0,
+            # "door1_joint": 0.0,
             "door2_joint": 0.0,
         },
         pos=(0.0, 0.0, 0.0),  # init pos of the articulation for teleop
     ),
     actuators={
         # Elevator buttons
-        "elevator_buttons": ImplicitActuatorCfg(
-            joint_names_expr=["button_[0-3]_[0-1]_joint"],
-            effort_limit_sim=400.0,
-            velocity_limit_sim=100.0,
-            stiffness=0.0,
-            damping=10.0,
-        ),
+        # "elevator_buttons": ImplicitActuatorCfg(
+        #     joint_names_expr=["button_[0-3]_[0-1]_joint"],
+        #     effort_limit_sim=400.0,
+        #     velocity_limit_sim=100.0,
+        #     stiffness=0.0,
+        #     damping=10.0,
+        # ),
         # Elevator doors
         "elevator_doors": ImplicitActuatorCfg(
-            joint_names_expr=["door1_joint", "door2_joint"],
+            joint_names_expr=["door2_joint"],
             effort_limit_sim=10000.0,
             velocity_limit_sim=2.61,
             stiffness=10000000.0,
