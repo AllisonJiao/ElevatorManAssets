@@ -50,6 +50,7 @@ ELEVATOR_CFG = ArticulationCfg(
             "button_2_1_joint": 0.0,
             "button_3_0_joint": 0.0,
             "button_3_1_joint": 0.0,
+            "door1_joint": 0.0,
             "door2_joint": 0.0,
         },
         pos=(0.0, 0.0, 0.0),  # init pos of the articulation for teleop
@@ -65,7 +66,7 @@ ELEVATOR_CFG = ArticulationCfg(
         ),
         # Elevator doors
         "elevator_doors": ImplicitActuatorCfg(
-            joint_names_expr=["door2_joint"],
+            joint_names_expr=["door1_joint", "door2_joint"],
             effort_limit_sim=10000.0,
             velocity_limit_sim=2.61,
             stiffness=10000000.0,
