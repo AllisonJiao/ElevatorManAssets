@@ -27,6 +27,265 @@
   </link>
 
   <!-- =========================
+       Buttons (static collision)
+       ========================= -->
+  <link name="button_0_0_link>">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="button_0_0.dae" scale="1 1 1"/>
+      </geometry>
+    </visual>
+
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.19 0.02 0.09"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.1"/>
+      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+    </inertial>
+  </link>
+
+  <joint name="button_0_0_joint" type="prismatic">
+    <parent link="cabin_link"/>
+    <child link="button_0_0_link"/>
+    <origin xyz="X Y Z" rpy="0 0 0"/>
+    <!-- Press direction: -Y -->
+    <axis xyz="0 -1 0"/>
+    <!-- 1 cm travel -->
+    <limit lower="0.0" upper="0.01" effort="20" velocity="0.2"/>
+  </joint>
+
+  <link name="button_0_1_link>">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="button_0_1.dae" scale="1 1 1"/>
+      </geometry>
+    </visual>
+
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.19 0.02 0.09"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.1"/>
+      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+    </inertial>
+  </link>
+
+  <joint name="button_0_1_joint" type="prismatic">
+    <parent link="cabin_link"/>
+    <child link="button_0_1_link"/>
+    <origin xyz="X Y Z" rpy="0 0 0"/>
+    <!-- Press direction: -Y -->
+    <axis xyz="0 -1 0"/>
+    <!-- 1 cm travel -->
+    <limit lower="0.0" upper="0.01" effort="20" velocity="0.2"/>
+  </joint>
+
+  <link name="button_1_0_link>">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="button_1_0.dae" scale="1 1 1"/>
+      </geometry>
+    </visual>
+
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.19 0.02 0.09"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.1"/>
+      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+    </inertial> 
+  </link>
+
+  <joint name="button_1_0_joint" type="prismatic">
+    <parent link="cabin_link"/>
+    <child link="button_1_0_link"/>
+    <origin xyz="X Y Z" rpy="0 0 0"/>
+    <!-- Press direction: -Y -->
+    <axis xyz="0 -1 0"/>
+    <!-- 1 cm travel -->
+    <limit lower="0.0" upper="0.01" effort="20" velocity="0.2"/>
+  </joint>
+
+  <link name="button_1_1_link>">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="button_1_1.dae" scale="1 1 1"/>
+      </geometry>
+    </visual>
+
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.19 0.02 0.09"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.1"/>
+      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+    </inertial>
+  </link>
+
+  <joint name="button_1_1_joint" type="prismatic">
+    <parent link="cabin_link"/>
+    <child link="button_1_1_link"/>
+    <origin xyz="X Y Z" rpy="0 0 0"/>
+    <!-- Press direction: -Y -->
+    <axis xyz="0 -1 0"/>
+    <!-- 1 cm travel -->
+    <limit lower="0.0" upper="0.01" effort="20" velocity="0.2"/>
+  </joint>
+
+  <link name="button_2_0_link>">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="button_2_0.dae" scale="1 1 1"/>
+      </geometry>
+    </visual>
+
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.19 0.02 0.09"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.1"/>
+      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+    </inertial>
+  </link>
+
+  <joint name="button_2_0_joint" type="prismatic">
+    <parent link="cabin_link"/>
+    <child link="button_2_0_link"/>
+    <origin xyz="X Y Z" rpy="0 0 0"/>
+    <!-- Press direction: -Y -->
+    <axis xyz="0 -1 0"/>
+    <!-- 1 cm travel -->
+    <limit lower="0.0" upper="0.01" effort="20" velocity="0.2"/>
+  </joint>
+
+  <link name="button_2_1_link>">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="button_2_1.dae" scale="1 1 1"/>
+      </geometry>
+    </visual>
+
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.19 0.02 0.09"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.1"/>
+      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+    </inertial>
+  </link>
+
+  <joint name="button_2_1_joint" type="prismatic">
+    <parent link="cabin_link"/>
+    <child link="button_2_1_link"/>
+    <origin xyz="X Y Z" rpy="0 0 0"/>
+    <!-- Press direction: -Y -->
+    <axis xyz="0 -1 0"/>
+    <!-- 1 cm travel -->
+    <limit lower="0.0" upper="0.01" effort="20" velocity="0.2"/>
+  </joint>
+
+  <link name="button_3_0_link>">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="button_3_0.dae" scale="1 1 1"/>
+      </geometry>
+    </visual>
+
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.19 0.02 0.09"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.1"/>
+      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+    </inertial>
+  </link>
+
+  <joint name="button_3_0_joint" type="prismatic">
+    <parent link="cabin_link"/>
+    <child link="button_3_0_link"/>
+    <origin xyz="X Y Z" rpy="0 0 0"/>
+    <!-- Press direction: -Y -->
+    <axis xyz="0 -1 0"/>
+    <!-- 1 cm travel -->
+    <limit lower="0.0" upper="0.01" effort="20" velocity="0.2"/>
+  </joint>
+
+  <link name="button_3_1_link>">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="button_3_1.dae" scale="1 1 1"/>
+      </geometry>
+    </visual>
+
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.19 0.02 0.09"/>
+      </geometry>
+    </collision>
+
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.1"/>
+      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+    </inertial>
+  </link>
+
+  <joint name="button_3_1_joint" type="prismatic">
+    <parent link="cabin_link"/>
+    <child link="button_3_1_link"/> 
+    <origin xyz="X Y Z" rpy="0 0 0"/>
+    <!-- Press direction: -Y -->
+    <axis xyz="0 -1 0"/>
+    <!-- 1 cm travel -->
+    <limit lower="0.0" upper="0.01" effort="20" velocity="0.2"/>
+  </joint>
+
+  <!-- =========================
        Door2 (moving)
        ========================= -->
   <link name="door2_link">
