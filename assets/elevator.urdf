@@ -54,7 +54,7 @@
   <joint name="button_0_0_joint" type="prismatic">
     <parent link="cabin_link"/>
     <child link="button_0_0_link"/>
-    <origin xyz="X Y Z" rpy="0 0 0"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
     <!-- Press direction: -Y -->
     <axis xyz="0 -1 0"/>
     <!-- 1 cm travel -->
@@ -86,7 +86,7 @@
   <joint name="button_0_1_joint" type="prismatic">
     <parent link="cabin_link"/>
     <child link="button_0_1_link"/>
-    <origin xyz="X Y Z" rpy="0 0 0"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
     <!-- Press direction: -Y -->
     <axis xyz="0 -1 0"/>
     <!-- 1 cm travel -->
@@ -118,7 +118,7 @@
   <joint name="button_1_0_joint" type="prismatic">
     <parent link="cabin_link"/>
     <child link="button_1_0_link"/>
-    <origin xyz="X Y Z" rpy="0 0 0"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
     <!-- Press direction: -Y -->
     <axis xyz="0 -1 0"/>
     <!-- 1 cm travel -->
@@ -150,7 +150,7 @@
   <joint name="button_1_1_joint" type="prismatic">
     <parent link="cabin_link"/>
     <child link="button_1_1_link"/>
-    <origin xyz="X Y Z" rpy="0 0 0"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
     <!-- Press direction: -Y -->
     <axis xyz="0 -1 0"/>
     <!-- 1 cm travel -->
@@ -182,7 +182,7 @@
   <joint name="button_2_0_joint" type="prismatic">
     <parent link="cabin_link"/>
     <child link="button_2_0_link"/>
-    <origin xyz="X Y Z" rpy="0 0 0"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
     <!-- Press direction: -Y -->
     <axis xyz="0 -1 0"/>
     <!-- 1 cm travel -->
@@ -214,7 +214,7 @@
   <joint name="button_2_1_joint" type="prismatic">
     <parent link="cabin_link"/>
     <child link="button_2_1_link"/>
-    <origin xyz="X Y Z" rpy="0 0 0"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
     <!-- Press direction: -Y -->
     <axis xyz="0 -1 0"/>
     <!-- 1 cm travel -->
@@ -246,7 +246,7 @@
   <joint name="button_3_0_joint" type="prismatic">
     <parent link="cabin_link"/>
     <child link="button_3_0_link"/>
-    <origin xyz="X Y Z" rpy="0 0 0"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
     <!-- Press direction: -Y -->
     <axis xyz="0 -1 0"/>
     <!-- 1 cm travel -->
@@ -278,7 +278,7 @@
   <joint name="button_3_1_joint" type="prismatic">
     <parent link="cabin_link"/>
     <child link="button_3_1_link"/> 
-    <origin xyz="X Y Z" rpy="0 0 0"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
     <!-- Press direction: -Y -->
     <axis xyz="0 -1 0"/>
     <!-- 1 cm travel -->
