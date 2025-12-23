@@ -49,7 +49,7 @@ class ElevatorSceneCfg(InteractiveSceneCfg):
     )
 
     # elevator
-    elevator: ArticulationCfg = ELEVATOR_CFG.replace(prim_path="/World/Elevator/root")
+    elevator: ArticulationCfg = ELEVATOR_CFG.replace(prim_path="/World/elevator")
 
     # robot
     agibot: ArticulationCfg = AGIBOT_A2D_CFG.replace(prim_path="/World/Agibot")
