@@ -134,6 +134,9 @@ def run_simulator(sim: sim_utils.SimulationContext, entities: dict[str, Articula
 
         elevator.write_joint_state_to_sim(joint_pos, joint_vel)
 
+        q = elevator.data.joint_pos[0, door2_id].item()
+        print("[DEBUG] door2 actual q:", q)
+
         # write to sim
         agibot.write_data_to_sim()
         # elevator.write_data_to_sim()
