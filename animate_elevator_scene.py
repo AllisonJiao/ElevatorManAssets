@@ -442,17 +442,21 @@ def main():
                     cube_has_rigid_body = cube_rigid_body_api is not None
                     print(f"[INFO] Cube_025 has RigidBodyAPI: {cube_has_rigid_body}")
                     
-                    # DIAGNOSIS: Check for nested Xform issue
-                    if door2_has_rigid_body and cube_has_collider and not cube_has_rigid_body:
-                        print(f"\n[WARNING] ===== NESTED XFORM ISSUE DETECTED =====")
-                        print(f"[WARNING] RigidBodyAPI is on parent Xform (Door2)")
-                        print(f"[WARNING] CollisionAPI is on child mesh (Cube_025)")
-                        print(f"[WARNING] This structure can cause physics problems!")
-                        print(f"[WARNING] ============================================\n")
-                        print(f"[SOLUTION] Option 1: Move RigidBodyAPI from Door2 Xform to Cube_025")
-                        print(f"[SOLUTION] Option 2: Move CollisionAPI from Cube_025 to Door2 Xform")
-                        print(f"[SOLUTION] Option 3: Ensure the joint is connected to the correct body")
-                        print(f"[SOLUTION]       (The joint's child body should match where RigidBodyAPI is)")
+                    # DIAGNOSIS: Check for issues
+                    if door2_has_rigid_body and cube_has_rigid_body:
+                        print(f"\n[ERROR] ===== CONFLICTING RIGID BODY APIs DETECTED =====")
+                        print(f"[ERROR] BOTH Door2 Xform AND Cube_025 have RigidBodyAPI!")
+                        print(f"[ERROR] This creates two separate rigid bodies and causes conflicts!")
+                        print(f"[ERROR] The articulation uses 'Door2' as the body (from Xform)")
+                        print(f"[ERROR] But Cube_025's RigidBodyAPI creates a second conflicting body")
+                        print(f"[ERROR] ====================================================\n")
+                        print(f"[SOLUTION] Remove RigidBodyAPI from Cube_025")
+                        print(f"[SOLUTION]   - Keep RigidBodyAPI only on Door2 Xform")
+                        print(f"[SOLUTION]   - Keep CollisionAPI on Cube_025 (this is fine)")
+                        print(f"[SOLUTION] The collider will be associated with Door2's RigidBodyAPI")
+                        print(f"[SOLUTION] ====================================================\n")
+                    elif door2_has_rigid_body and cube_has_collider and not cube_has_rigid_body:
+                        print(f"[INFO] Structure looks OK: RigidBodyAPI on Door2, CollisionAPI on Cube_025")
                 else:
                     print(f"[WARNING] Could not find Cube_025 mesh")
             else:
