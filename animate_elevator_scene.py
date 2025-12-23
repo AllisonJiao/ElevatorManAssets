@@ -244,7 +244,8 @@ def run_simulator(
     right_joint_groups: dict[str, torch.Tensor],
     cached_symmetric_refs: dict[str, torch.Tensor],
     cached_symmetric_ref_all: torch.Tensor,
-    animate_elevator_ids: torch.Tensor,
+    elevator_door_ids: torch.Tensor,
+    elevator_button_ids: torch.Tensor,
     lift_body_joint_ids: torch.Tensor,
     robot_animation_range: float,
     lift_body_range: float,
@@ -268,7 +269,7 @@ def run_simulator(
             )
             agibot.reset()
             
-            # Reset elevator door position to default (initial position)
+            # Reset elevator door position and button positions to default (initial position)
             elevator.write_joint_state_to_sim(
                 elevator.data.default_joint_pos.clone(),
                 elevator.data.default_joint_vel.clone()
@@ -291,9 +292,18 @@ def run_simulator(
             t = (phase - 400) / 99.0
             delta = open_delta + t * (close_delta - open_delta)
 
-        # Update door position using joint-based animation
+        # Update elevator joint positions (doors and buttons) using joint-based animation
         joint_pos_target = elevator.data.default_joint_pos.clone()
-        joint_pos_target[:, animate_elevator_ids] += delta
+        
+        # Update door position
+        joint_pos_target[:, elevator_door_ids] += delta
+        
+        # Update button positions - press down gradually over the period
+        # Button press animation: starts at 0, reaches max press at phase 0.5, stays pressed
+        button_press_delta = min(phase / (period / 2.0), 1.0) * 0.05  # Max press distance of 0.05
+        joint_pos_target[:, elevator_button_ids] += button_press_delta
+        
+        # Clamp all joints to their limits
         joint_pos_target = joint_pos_target.clamp_(
             elevator.data.soft_joint_pos_limits[..., 0], elevator.data.soft_joint_pos_limits[..., 1]
         )
@@ -401,9 +411,13 @@ def main():
         cached_symmetric_ref_all = None
         print("[WARN] No arm joints found for animation. Robot will use default pose.")
 
-    animate_elevator_joint_names = ["door2_joint"]
-    animate_elevator_ids, _ = elevator.find_joints(animate_elevator_joint_names)
-    animate_elevator_ids = torch.as_tensor(animate_elevator_ids, device=elevator.device, dtype=torch.long)
+    elevator_door_joint_names = ["door2_joint"]
+    elevator_door_ids, _ = elevator.find_joints(elevator_door_joint_names)
+    elevator_door_ids = torch.as_tensor(elevator_door_ids, device=elevator.device, dtype=torch.long)
+
+    elevator_button_joint_names = ["button_0_0_joint", "button_0_1_joint", "button_1_0_joint", "button_1_1_joint", "button_2_0_joint", "button_2_1_joint", "button_3_0_joint", "button_3_1_joint"]
+    elevator_button_ids, _ = elevator.find_joints(elevator_button_joint_names)
+    elevator_button_ids = torch.as_tensor(elevator_button_ids, device=elevator.device, dtype=torch.long)
 
     # Setup robot's joint_lift_body prismatic joint animation (for testing/reference)
     lift_body_joint_names = ["joint_lift_body"]
@@ -418,7 +432,7 @@ def main():
         sim, scene, agibot, elevator,
         left_joint_groups, right_joint_groups,
         cached_symmetric_refs, cached_symmetric_ref_all,
-        animate_elevator_ids, lift_body_joint_ids,
+        elevator_door_ids, elevator_button_ids, lift_body_joint_ids,
         robot_animation_range, lift_body_range
     )
 
