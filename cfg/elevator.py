@@ -16,7 +16,7 @@ import isaaclab.sim as sim_utils
 from isaaclab.actuators import ImplicitActuatorCfg
 from isaaclab.assets.articulation import ArticulationCfg
 
-ELEVATOR_ASSET_PATH = "ElevatorManAssets/assets/Collected_elevator_asset_tmp/elevator_asset.usdc"
+ELEVATOR_ASSET_PATH = "ElevatorManAssets/assets/elevator/elevator.usd"
 
 ##
 # Configuration
@@ -67,10 +67,10 @@ ELEVATOR_CFG = ArticulationCfg(
         # Elevator doors
         "elevator_doors": ImplicitActuatorCfg(
             joint_names_expr=["door2_joint"],
-            effort_limit_sim=10000.0,
-            velocity_limit_sim=2.61,
-            stiffness=10000000.0,
-            damping=200.0,
+            effort_limit_sim=400.0,
+            velocity_limit_sim=100,
+            stiffness=100.0,
+            damping=20.0,
         ),
     },
 )
