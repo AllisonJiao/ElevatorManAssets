@@ -50,7 +50,6 @@ ELEVATOR_CFG = ArticulationCfg(
             "button_2_1_joint": 0.0,
             "button_3_0_joint": 0.0,
             "button_3_1_joint": 0.0,
-            "door1_joint": 0.0,
             "door2_joint": 0.0,
         },
         pos=(0.0, 0.0, 0.0),  # init pos of the articulation for teleop
