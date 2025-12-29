@@ -52,7 +52,14 @@ class ElevatorSceneCfg(InteractiveSceneCfg):
     elevator: ArticulationCfg = ELEVATOR_CFG.replace(prim_path="/World/elevator")
 
     # robot
-    agibot: ArticulationCfg = AGIBOT_A2D_CFG.replace(prim_path="/World/Agibot")
+    agibot: ArticulationCfg = AGIBOT_A2D_CFG.replace(
+        prim_path="/World/Agibot",
+        init_state=ArticulationCfg.InitialStateCfg(
+            joint_pos=AGIBOT_A2D_CFG.init_state.joint_pos,  # preserve original joint positions
+            pos=(-2.0, -0.2, 0.0),
+            quat=(0.7071, 0.0, 0.0, -0.7071),  # quaternion (w, x, y, z) for -90° rotation around Z-axis
+        ),
+    )
 
 def set_robot_pose_demo(
     agibot: Articulation, 

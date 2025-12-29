@@ -79,7 +79,6 @@ AGIBOT_A2D_CFG = ArticulationCfg(
             "right_Left_RevoluteJoint": 0.0,
         },
         pos=(-2.0, -0.2, 0.0),  # init pos of the articulation for teleop
-        quat=(0.7071, 0.0, 0.0, -0.7071),  # quaternion (w, x, y, z) for -90° rotation around Z-axis
     ),
     actuators={
         # Body lift and torso actuators
