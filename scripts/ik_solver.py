@@ -23,6 +23,7 @@ app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
 import torch
+import math
 
 import isaaclab.sim as sim_utils
 # import prims as prim_utils
@@ -68,7 +69,7 @@ class ElevatorSceneCfg(InteractiveSceneCfg):
         init_state=ArticulationCfg.InitialStateCfg(
             joint_pos=AGIBOT_A2D_CFG.init_state.joint_pos,  # preserve original joint positions
             pos=(-2.0, -0.2, 0.0),
-            rot=(0.0, 0.0, -0.7071, 0.7071),
+            rot=(0.0, 0.0, -math.sqrt(0.5), math.sqrt(0.5)),
         ),
     )
 
