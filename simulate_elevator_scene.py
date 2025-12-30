@@ -35,7 +35,7 @@ from isaaclab.markers import VisualizationMarkers
 from isaaclab.markers.config import FRAME_MARKER_CFG
 from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.utils import configclass
-from isaaclab.utils.math import subtract_frame_transforms, add_frame_transforms
+from isaaclab.utils.math import subtract_frame_transforms
 
 from cfg.agibot import AGIBOT_A2D_CFG
 from cfg.elevator import ELEVATOR_CFG
@@ -312,25 +312,32 @@ def run_simulator(
         scene.update(sim.get_physics_dt())
 
         # Update goal marker visualization
-        if goal_idx < right_arm_goals.shape[0]:
-            # Get current goal in robot local frame
-            goal_pos_b = right_arm_goals[goal_idx:goal_idx+1, :3]  # (1, 3)
-            goal_quat_b = right_arm_goals[goal_idx:goal_idx+1, 3:7]  # (1, 4)
+        # Compute goal position in world frame directly from Blender layout
+        if goal_idx < len(button_body_names):
+            # Blender layout parameters (same as in get_ee_goals)
+            start_x, start_y, start_z = -1.75, -0.92, 1.625
+            dx, dz = -0.22, -0.178
             
-            # Convert goal from robot local frame to world frame for visualization
-            root_w = agibot.data.root_pose_w[0:1, :]  # (1, 7)
-            robot_root_pos_w = root_w[:, :3]  # (1, 3)
-            robot_root_quat_w = root_w[:, 3:7]  # (1, 4)
-            
-            goal_pos_w, goal_quat_w = add_frame_transforms(
-                robot_root_pos_w, robot_root_quat_w,
-                goal_pos_b, goal_quat_b,
-            )
-            
-            # Visualize goal marker (expand to all envs if needed)
-            goal_pos_w_all = goal_pos_w.expand(scene.num_envs, -1)
-            goal_quat_w_all = goal_quat_w.expand(scene.num_envs, -1)
-            goal_marker.visualize(goal_pos_w_all, goal_quat_w_all)
+            # Parse row and col from button name to get world position
+            try:
+                body_name = button_body_names[goal_idx]
+                parts = body_name.split("_")
+                if len(parts) >= 3 and parts[0] == "button":
+                    row = int(parts[1])
+                    col = int(parts[2])
+                    x = start_x + col * dx
+                    y = start_y
+                    z = start_z + row * dz
+                    goal_pos_w = torch.tensor([[x, y, z]], device=agibot.device, dtype=torch.float32)  # (1, 3)
+                    goal_quat_w = torch.tensor([[0.0, 0.0, 0.0, 1.0]], device=agibot.device, dtype=torch.float32)  # Identity quaternion (1, 4)
+                    
+                    # Expand to all envs for visualization
+                    goal_pos_w_all = goal_pos_w.expand(scene.num_envs, -1)
+                    goal_quat_w_all = goal_quat_w.expand(scene.num_envs, -1)
+                    goal_marker.visualize(goal_pos_w_all, goal_quat_w_all)
+            except (ValueError, IndexError):
+                # Skip visualization if parsing fails
+                pass
 
         # Debug output: Print EE position and button positions at the end of each period
         if count % period == period - 1:  # Last frame of the period
