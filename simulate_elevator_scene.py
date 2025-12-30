@@ -31,9 +31,11 @@ import isaaclab.sim as sim_utils
 from isaaclab.assets import AssetBaseCfg, ArticulationCfg, Articulation
 from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
 from isaaclab.managers import SceneEntityCfg
+from isaaclab.markers import VisualizationMarkers
+from isaaclab.markers.config import FRAME_MARKER_CFG
 from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.utils import configclass
-from isaaclab.utils.math import subtract_frame_transforms
+from isaaclab.utils.math import subtract_frame_transforms, add_frame_transforms
 
 from cfg.agibot import AGIBOT_A2D_CFG
 from cfg.elevator import ELEVATOR_CFG
@@ -184,12 +186,14 @@ def run_simulator(
     right_arm_goals: torch.Tensor,
     fixed_shoulder_angles: torch.Tensor,
     button_body_names: list[str],
+    goal_marker: VisualizationMarkers,
     period: int = 1000,  # Increased default period to allow more time for IK to converge
 ):
     """Run the simulation loop with robot and elevator animations.
     
     Args:
         period: Number of simulation steps per animation period. Longer periods give IK more time to converge.
+        goal_marker: Visualization marker for displaying the IK goal position
     """
     # Animation parameters
     count = 0
@@ -306,6 +310,27 @@ def run_simulator(
 
         sim.step()
         scene.update(sim.get_physics_dt())
+
+        # Update goal marker visualization
+        if goal_idx < right_arm_goals.shape[0]:
+            # Get current goal in robot local frame
+            goal_pos_b = right_arm_goals[goal_idx:goal_idx+1, :3]  # (1, 3)
+            goal_quat_b = right_arm_goals[goal_idx:goal_idx+1, 3:7]  # (1, 4)
+            
+            # Convert goal from robot local frame to world frame for visualization
+            root_w = agibot.data.root_pose_w[0:1, :]  # (1, 7)
+            robot_root_pos_w = root_w[:, :3]  # (1, 3)
+            robot_root_quat_w = root_w[:, 3:7]  # (1, 4)
+            
+            goal_pos_w, goal_quat_w = add_frame_transforms(
+                robot_root_pos_w, robot_root_quat_w,
+                goal_pos_b, goal_quat_b,
+            )
+            
+            # Visualize goal marker (expand to all envs if needed)
+            goal_pos_w_all = goal_pos_w.expand(scene.num_envs, -1)
+            goal_quat_w_all = goal_quat_w.expand(scene.num_envs, -1)
+            goal_marker.visualize(goal_pos_w_all, goal_quat_w_all)
 
         # Debug output: Print EE position and button positions at the end of each period
         if count % period == period - 1:  # Last frame of the period
@@ -494,6 +519,11 @@ def main():
                          "button_2_0_link", "button_2_1_link", "button_3_0_link", "button_3_1_link"]
     right_arm_goals = get_ee_goals(elevator, agibot, button_body_names)
 
+    # Setup marker for EE goal visualization
+    frame_cfg = FRAME_MARKER_CFG.copy()
+    frame_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)  # Make marker visible but not too large
+    goal_marker = VisualizationMarkers(frame_cfg.replace(prim_path="/Visuals/right_goal"))
+
     # Run the simulator
     run_simulator(
         sim, scene, agibot, elevator,
@@ -505,6 +535,7 @@ def main():
         right_arm_goals,
         fixed_shoulder_angles,
         button_body_names,
+        goal_marker,
         period=args_cli.period
     )
 
