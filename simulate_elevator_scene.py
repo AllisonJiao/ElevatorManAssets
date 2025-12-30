@@ -76,10 +76,10 @@ def get_ee_goals(
     button_body_names: list[str],
     default_quat: torch.Tensor = None,
 ) -> torch.Tensor:
-    """Get elevator button positions in world frame and convert to robot local frame.
+    """Get elevator button positions in world frame (computed from Blender layout) and convert to robot local frame.
     
     Args:
-        elevator: The elevator articulation
+        elevator: The elevator articulation (not used for positions, but for device reference)
         robot: The robot articulation (for root pose reference)
         button_body_names: List of button body names (e.g., ["button_0_0_link", "button_0_1_link", ...])
         default_quat: Default quaternion for button orientation [qx, qy, qz, qw]. 
@@ -91,23 +91,40 @@ def get_ee_goals(
     """
     device = elevator.device
     
-    # Find button body IDs by matching body names
-    button_body_ids = []
+    # Button layout parameters from Blender
+    start_x, start_y, start_z = -1.75, -0.92, 1.625
+    dx, dz = -0.22, -0.178
+    rows, cols = 4, 2
+    
+    # Compute button positions in world frame based on Blender layout
+    # Parse button indices from names (e.g., "button_0_0_link" -> row=0, col=0)
+    button_positions_w = []
     for body_name in button_body_names:
-        if body_name in elevator.data.body_names:
-            body_id = list(elevator.data.body_names).index(body_name)
-            button_body_ids.append(body_id)
+        # Extract row and col from button name (format: "button_<row>_<col>_link")
+        try:
+            parts = body_name.split("_")
+            if len(parts) >= 3 and parts[0] == "button":
+                row = int(parts[1])
+                col = int(parts[2])
+                # Compute position: x = start_x + c * dx, y = start_y, z = start_z + r * dz
+                x = start_x + col * dx
+                y = start_y
+                z = start_z + row * dz
+                button_positions_w.append([x, y, z])
+            else:
+                # If name doesn't match expected format, use default position
+                print(f"[WARN] Button name '{body_name}' doesn't match expected format 'button_<row>_<col>_link', using default position")
+                button_positions_w.append([start_x, start_y, start_z])
+        except (ValueError, IndexError) as e:
+            print(f"[WARN] Failed to parse button name '{body_name}': {e}, using default position")
+            button_positions_w.append([start_x, start_y, start_z])
     
-    num_buttons = len(button_body_ids)
-    
+    num_buttons = len(button_positions_w)
     if num_buttons == 0:
         return torch.zeros((0, 7), device=device)
     
-    button_body_ids_tensor = torch.tensor(button_body_ids, device=device, dtype=torch.long)
-    
-    # Get button body poses in world frame (use env 0)
-    # body_pose_w shape: (num_envs, num_bodies, 7) where last dim is [x, y, z, qx, qy, qz, qw]
-    button_poses_w = elevator.data.body_pose_w[0, button_body_ids_tensor, :]  # (num_buttons, 7)
+    # Convert to tensor: (num_buttons, 3)
+    button_pos_w = torch.tensor(button_positions_w, device=device, dtype=torch.float32)
     
     # Get robot root pose for frame transformation (use env 0)
     robot_root_pos_w = robot.data.root_pose_w[0:1, :3]  # (1, 3) - batched for subtract_frame_transforms
@@ -119,9 +136,8 @@ def get_ee_goals(
     else:
         default_quat_w = default_quat
     
-    # Extract button positions and orientations from world frame
-    button_pos_w = button_poses_w[:, :3]  # (num_buttons, 3)
-    button_quat_w = button_poses_w[:, 3:7] if button_poses_w.shape[1] >= 7 else default_quat_w.unsqueeze(0).expand(num_buttons, 4)  # (num_buttons, 4)
+    # Expand quaternion to match number of buttons
+    button_quat_w = default_quat_w.unsqueeze(0).expand(num_buttons, 4)  # (num_buttons, 4)
     
     # Convert each button pose from world frame to robot local frame
     goals_list = []
@@ -295,20 +311,46 @@ def run_simulator(
             print(f"\n[DEBUG] === Period End (goal_idx={goal_idx}) ===")
             print(f"[DEBUG] Right End Effector Position (World Frame): [{right_ee_pos_w[0]:.4f}, {right_ee_pos_w[1]:.4f}, {right_ee_pos_w[2]:.4f}]")
             
-            # Get button positions in world frame
+            # Expected button positions based on Blender layout
+            # start_x = -1.75, start_y = -0.92, start_z = 1.625
+            # dx = -0.22, dz = -0.178
+            # rows = 4, cols = 2
+            start_x, start_y, start_z = -1.75, -0.92, 1.625
+            dx, dz = -0.22, -0.178
+            rows, cols = 4, 2
+            
+            print(f"[DEBUG] Expected Button Positions (World Frame - from Blender layout):")
+            for r in range(rows):
+                for c in range(cols):
+                    x = start_x + c * dx
+                    y = start_y
+                    z = start_z + r * dz
+                    button_idx = r * cols + c
+                    if button_idx < len(button_body_names):
+                        print(f"  {button_body_names[button_idx]}: [{x:.4f}, {y:.4f}, {z:.4f}]")
+            
+            # Get button positions in world frame from articulation
             button_body_ids = []
+            found_body_names = []
             for body_name in button_body_names:
                 if body_name in elevator.data.body_names:
                     body_id = list(elevator.data.body_names).index(body_name)
                     button_body_ids.append(body_id)
+                    found_body_names.append(body_name)
+                else:
+                    print(f"[DEBUG] WARNING: Button body '{body_name}' not found in elevator.data.body_names")
+            
+            # Print all available body names for debugging
+            if len(button_body_ids) == 0:
+                print(f"[DEBUG] Available elevator body names: {list(elevator.data.body_names)[:20]}...")  # Print first 20
             
             if len(button_body_ids) > 0:
                 button_body_ids_tensor = torch.tensor(button_body_ids, device=elevator.device, dtype=torch.long)
                 button_poses_w = elevator.data.body_pose_w[0, button_body_ids_tensor, :7]  # (num_buttons, 7)
                 button_positions_w = button_poses_w[:, :3].cpu().numpy()
                 
-                print(f"[DEBUG] Button Positions (World Frame):")
-                for i, body_name in enumerate(button_body_names):
+                print(f"[DEBUG] Button Positions (World Frame - from articulation):")
+                for i, body_name in enumerate(found_body_names):
                     if i < len(button_positions_w):
                         pos = button_positions_w[i]
                         print(f"  {body_name}: [{pos[0]:.4f}, {pos[1]:.4f}, {pos[2]:.4f}]")
@@ -319,7 +361,7 @@ def run_simulator(
                 robot_root_quat_w = root_w[:, 3:7]  # (1, 4)
                 
                 print(f"[DEBUG] Button Positions (Robot Local Frame):")
-                for i, body_name in enumerate(button_body_names):
+                for i, body_name in enumerate(found_body_names):
                     if i < len(button_body_ids_tensor):
                         button_pos_w_i = button_poses_w[i:i+1, :3]  # (1, 3)
                         button_quat_w_i = button_poses_w[i:i+1, 3:7]  # (1, 4)
