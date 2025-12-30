@@ -228,7 +228,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
     # ---------------- Timing ----------------
     sim_dt = sim.get_physics_dt()
-    period = 150
+    period = 500
     count = 0
     goal_idx = 0
 
