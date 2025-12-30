@@ -181,7 +181,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
     # ---------------- Scene entities ----------------
     left_cfg = SceneEntityCfg(
-        "robot",
+        "agibot",
         joint_names=["left_arm_joint[1-7]"],
         body_names=["Link6_l"],
     )
@@ -213,7 +213,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
     # ---------------- Goals ----------------
     left_arm_goals = get_ee_goals(
         scene["elevator"], 
-        scene["robot"], 
+        robot, 
         ["button_0_0_link", "button_0_1_link", "button_1_0_link", "button_1_1_link", "button_2_0_link", "button_2_1_link", "button_3_0_link", "button_3_1_link"]
     )
 
