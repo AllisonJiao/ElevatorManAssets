@@ -55,6 +55,9 @@ class ElevatorSceneCfg(InteractiveSceneCfg):
     # robot
     agibot: ArticulationCfg = AGIBOT_A2D_CFG.replace(
         prim_path="/World/Agibot",
+        spawn=AGIBOT_A2D_CFG.spawn.replace(
+            scale=(1.2, 1.2, 1.2),
+        ),
         init_state=ArticulationCfg.InitialStateCfg(
             joint_pos=AGIBOT_A2D_CFG.init_state.joint_pos,  # preserve original joint positions
             pos=(-2.0, -0.2, 0.0),

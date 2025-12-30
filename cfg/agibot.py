@@ -24,6 +24,7 @@ from isaaclab.utils.assets import ISAACLAB_NUCLEUS_DIR
 AGIBOT_A2D_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(
         usd_path=f"{ISAACLAB_NUCLEUS_DIR}/Robots/Agibot/A2D/A2D_physics.usd",
+        scale=(1.0, 1.0, 1.0),  # Scale factor (x, y, z). Use uniform scaling like (1.2, 1.2, 1.2) to scale by 1.2x
         activate_contact_sensors=True,
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=False,
