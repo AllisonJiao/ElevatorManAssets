@@ -166,6 +166,7 @@ def run_simulator(
     right_ee_jac: int,
     right_arm_goals: torch.Tensor,
     fixed_shoulder_angles: torch.Tensor,
+    button_body_names: list[str],
 ):
     """Run the simulation loop with robot and elevator animations."""
     # Animation parameters
@@ -285,6 +286,58 @@ def run_simulator(
         sim.step()
         scene.update(sim.get_physics_dt())
 
+        # Debug output: Print EE position and button positions at the end of each period
+        if count % period == period - 1:  # Last frame of the period
+            # Get end effector position in world frame (after update)
+            right_ee_w_final = agibot.data.body_pose_w[0, right_cfg.body_ids[0], :7]  # [x, y, z, qx, qy, qz, qw]
+            right_ee_pos_w = right_ee_w_final[:3].cpu().numpy()
+            
+            print(f"\n[DEBUG] === Period End (goal_idx={goal_idx}) ===")
+            print(f"[DEBUG] Right End Effector Position (World Frame): [{right_ee_pos_w[0]:.4f}, {right_ee_pos_w[1]:.4f}, {right_ee_pos_w[2]:.4f}]")
+            
+            # Get button positions in world frame
+            button_body_ids = []
+            for body_name in button_body_names:
+                if body_name in elevator.data.body_names:
+                    body_id = list(elevator.data.body_names).index(body_name)
+                    button_body_ids.append(body_id)
+            
+            if len(button_body_ids) > 0:
+                button_body_ids_tensor = torch.tensor(button_body_ids, device=elevator.device, dtype=torch.long)
+                button_poses_w = elevator.data.body_pose_w[0, button_body_ids_tensor, :7]  # (num_buttons, 7)
+                button_positions_w = button_poses_w[:, :3].cpu().numpy()
+                
+                print(f"[DEBUG] Button Positions (World Frame):")
+                for i, body_name in enumerate(button_body_names):
+                    if i < len(button_positions_w):
+                        pos = button_positions_w[i]
+                        print(f"  {body_name}: [{pos[0]:.4f}, {pos[1]:.4f}, {pos[2]:.4f}]")
+                
+                # Convert button positions to robot local frame (current robot pose)
+                root_w = agibot.data.root_pose_w[0:1, :]  # (1, 7)
+                robot_root_pos_w = root_w[:, :3]  # (1, 3)
+                robot_root_quat_w = root_w[:, 3:7]  # (1, 4)
+                
+                print(f"[DEBUG] Button Positions (Robot Local Frame):")
+                for i, body_name in enumerate(button_body_names):
+                    if i < len(button_body_ids_tensor):
+                        button_pos_w_i = button_poses_w[i:i+1, :3]  # (1, 3)
+                        button_quat_w_i = button_poses_w[i:i+1, 3:7]  # (1, 4)
+                        
+                        button_pos_b, button_quat_b = subtract_frame_transforms(
+                            robot_root_pos_w, robot_root_quat_w,
+                            button_pos_w_i, button_quat_w_i,
+                        )
+                        pos_b = button_pos_b[0, :].cpu().numpy()
+                        print(f"  {body_name}: [{pos_b[0]:.4f}, {pos_b[1]:.4f}, {pos_b[2]:.4f}]")
+                
+                # Print current goal position (robot local frame)
+                if goal_idx < right_arm_goals.shape[0]:
+                    current_goal = right_arm_goals[goal_idx, :3].cpu().numpy()
+                    print(f"[DEBUG] Current IK Goal Position (Robot Local Frame): [{current_goal[0]:.4f}, {current_goal[1]:.4f}, {current_goal[2]:.4f}]")
+            
+            print(f"[DEBUG] ===========================================\n")
+
         count += 1
 
 
@@ -393,7 +446,8 @@ def main():
         elevator_door_ids, elevator_button_ids,
         right_ik, right_cfg, right_ee_jac,
         right_arm_goals,
-        fixed_shoulder_angles
+        fixed_shoulder_angles,
+        button_body_names
     )
 
     simulation_app.close()
