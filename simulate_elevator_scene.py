@@ -9,7 +9,7 @@ from isaaclab.app import AppLauncher
 
 # add argparse arguments
 parser = argparse.ArgumentParser(
-    description="This script demonstrates adding a custom elevator to an Isaac Lab environment."
+    description="This script demonstrates robot IK reaching goals computed from Blender layout."
 )
 parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
 parser.add_argument("--robot_animation_range", type=float, default=0.1, help="Range of robot arm animation (0.0-1.0, where 1.0 = full 2π rotation)")
@@ -38,7 +38,6 @@ from isaaclab.utils import configclass
 from isaaclab.utils.math import subtract_frame_transforms
 
 from cfg.agibot import AGIBOT_A2D_CFG
-from cfg.elevator import ELEVATOR_CFG
 
 @configclass
 class ElevatorSceneCfg(InteractiveSceneCfg):
@@ -53,9 +52,6 @@ class ElevatorSceneCfg(InteractiveSceneCfg):
         prim_path="/World/Light",
         spawn=sim_utils.DomeLightCfg(intensity=3000.0),
     )
-
-    # elevator
-    elevator: ArticulationCfg = ELEVATOR_CFG.replace(prim_path="/World/elevator")
 
     # robot
     agibot: ArticulationCfg = AGIBOT_A2D_CFG.replace(
@@ -74,25 +70,23 @@ class ElevatorSceneCfg(InteractiveSceneCfg):
 # Get EE Goals (copied from ik_solver.py)
 # -----------------------------------------------------------------------------
 def get_ee_goals(
-    elevator: Articulation,
     robot: Articulation,
     button_body_names: list[str],
     default_quat: torch.Tensor = None,
 ) -> torch.Tensor:
-    """Get elevator button positions in world frame (computed from Blender layout) and convert to robot local frame.
+    """Get goal positions in world frame (computed from Blender layout) and convert to robot local frame.
     
     Args:
-        elevator: The elevator articulation (not used for positions, but for device reference)
-        robot: The robot articulation (for root pose reference)
+        robot: The robot articulation (for root pose reference and device)
         button_body_names: List of button body names (e.g., ["button_0_0_link", "button_0_1_link", ...])
         default_quat: Default quaternion for button orientation [qx, qy, qz, qw]. 
                       If None, uses identity quaternion [0, 0, 0, 1]
     
     Returns:
         goals: Tensor of shape (num_buttons, 7) with [x, y, z, qx, qy, qz, qw] in robot local frame
-               Each row corresponds to one button goal
+               Each row corresponds to one goal position
     """
-    device = elevator.device
+    device = robot.device
     
     # Button layout parameters from Blender
     start_x, start_y, start_z = -1.75, -0.92, 1.625
@@ -174,9 +168,6 @@ def run_simulator(
     sim: sim_utils.SimulationContext,
     scene: InteractiveScene,
     agibot: Articulation,
-    elevator: Articulation,
-    elevator_door_ids: torch.Tensor,
-    elevator_button_ids: torch.Tensor,
     right_ik: DifferentialIKController,
     right_cfg: SceneEntityCfg,
     right_ee_jac: int,
@@ -185,24 +176,20 @@ def run_simulator(
     goal_marker: VisualizationMarkers,
     period: int = 1000,  # Increased default period to allow more time for IK to converge
 ):
-    """Run the simulation loop with robot and elevator animations.
+    """Run the simulation loop with robot IK reaching goals.
     
     Args:
         period: Number of simulation steps per animation period. Longer periods give IK more time to converge.
         goal_marker: Visualization marker for displaying the IK goal position
     """
-    # Animation parameters
-    count = 0
-    open_delta = -0.5  # 50 cm along chosen axis
-    close_delta = 0.0
-
     print("[INFO] Done. Close the window to exit.")
 
     right_cmd = torch.zeros(scene.num_envs, 7, device=agibot.device)
     goal_idx = 0
+    count = 0
 
     while simulation_app.is_running():
-        # Reset robot and elevator to default positions at the start of each period
+        # Reset robot to default positions at the start of each period
         if count % period == 0:
             # Reset robot joint positions to default
             agibot.write_joint_state_to_sim(
@@ -211,14 +198,7 @@ def run_simulator(
             )
             agibot.reset()
             
-            # Reset elevator door position and button positions to default (initial position)
-            elevator.write_joint_state_to_sim(
-                elevator.data.default_joint_pos.clone(),
-                elevator.data.default_joint_vel.clone()
-            )
-            elevator.reset()
-            
-            # Move to next button goal
+            # Move to next goal
             goal_idx = (goal_idx + 1) % right_arm_goals.shape[0]
             # right_cmd shape: (num_envs, 7), right_arm_goals[goal_idx] shape: (7,)
             # Need to expand to match batch dimension
@@ -227,37 +207,6 @@ def run_simulator(
             right_ik.set_command(right_cmd)
             
             count = 0
-        
-        # Calculate phase for animations
-        phase = count % period
-
-        # Calculate door animation delta based on phase
-        if phase < 100:        # opening (first 100 frames)
-            t = phase / 99.0
-            delta = close_delta + t * (open_delta - close_delta)
-        elif phase < 400:      # hold open (frames 100-399)
-            delta = open_delta
-        else:                  # closing (frames 400-499)
-            t = (phase - 400) / 99.0
-            delta = open_delta + t * (close_delta - open_delta)
-
-        # Update elevator joint positions (doors and buttons) using joint-based animation
-        joint_pos_target = elevator.data.default_joint_pos.clone()
-        
-        # Update door position
-        joint_pos_target[:, elevator_door_ids] += delta
-        
-        # Update button positions - press down gradually over the period
-        # Button press animation: starts at 0, reaches max press at 50% of period, stays pressed
-        button_press_delta = min(phase / (period / 2.0), 1.0) * 0.05  # Max press distance of 0.05
-        joint_pos_target[:, elevator_button_ids] += button_press_delta
-        
-        # Clamp all joints to their limits
-        joint_pos_target = joint_pos_target.clamp_(
-            elevator.data.soft_joint_pos_limits[..., 0], elevator.data.soft_joint_pos_limits[..., 1]
-        )
-        elevator.set_joint_position_target(joint_pos_target)
-        elevator.write_data_to_sim()
 
         # Compute IK for right arm (all joints [1-7])
         root_w = agibot.data.root_pose_w
@@ -413,15 +362,6 @@ def main():
 
     # Access the robot articulation (because we used ArticulationCfg)
     agibot: Articulation = scene["agibot"]
-    elevator: Articulation = scene["elevator"]
-
-    elevator_door_joint_names = ["door2_joint"]
-    elevator_door_ids, _ = elevator.find_joints(elevator_door_joint_names)
-    elevator_door_ids = torch.as_tensor(elevator_door_ids, device=elevator.device, dtype=torch.long)
-
-    elevator_button_joint_names = ["button_0_0_joint", "button_0_1_joint", "button_1_0_joint", "button_1_1_joint", "button_2_0_joint", "button_2_1_joint", "button_3_0_joint", "button_3_1_joint"]
-    elevator_button_ids, _ = elevator.find_joints(elevator_button_joint_names)
-    elevator_button_ids = torch.as_tensor(elevator_button_ids, device=elevator.device, dtype=torch.long)
 
     # Setup IK controller for right arm
     ik_cfg = DifferentialIKControllerCfg(
@@ -444,10 +384,10 @@ def main():
     else:
         right_ee_jac = right_cfg.body_ids[0]
 
-    # Get button goals (button body names need to be checked - using link names from ik_solver.py)
+    # Get goal positions (computed from Blender layout)
     button_body_names = ["button_0_0_link", "button_0_1_link", "button_1_0_link", "button_1_1_link", 
                          "button_2_0_link", "button_2_1_link", "button_3_0_link", "button_3_1_link"]
-    right_arm_goals = get_ee_goals(elevator, agibot, button_body_names)
+    right_arm_goals = get_ee_goals(agibot, button_body_names)
 
     # Setup marker for EE goal visualization
     frame_cfg = FRAME_MARKER_CFG.copy()
@@ -459,8 +399,7 @@ def main():
 
     # Run the simulator
     run_simulator(
-        sim, scene, agibot, elevator,
-        elevator_door_ids, elevator_button_ids,
+        sim, scene, agibot,
         right_ik, right_cfg, right_ee_jac,
         right_arm_goals,
         button_body_names,
