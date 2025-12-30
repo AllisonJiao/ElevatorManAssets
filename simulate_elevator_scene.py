@@ -13,6 +13,7 @@ parser = argparse.ArgumentParser(
 )
 parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to spawn.")
 parser.add_argument("--robot_animation_range", type=float, default=0.1, help="Range of robot arm animation (0.0-1.0, where 1.0 = full 2π rotation)")
+parser.add_argument("--period", type=int, default=1000, help="Number of simulation steps per animation period (longer = more time for IK to converge)")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
