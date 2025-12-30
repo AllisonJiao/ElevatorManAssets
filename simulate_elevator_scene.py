@@ -311,72 +311,62 @@ def run_simulator(
             print(f"\n[DEBUG] === Period End (goal_idx={goal_idx}) ===")
             print(f"[DEBUG] Right End Effector Position (World Frame): [{right_ee_pos_w[0]:.4f}, {right_ee_pos_w[1]:.4f}, {right_ee_pos_w[2]:.4f}]")
             
-            # Expected button positions based on Blender layout
-            # start_x = -1.75, start_y = -0.92, start_z = 1.625
-            # dx = -0.22, dz = -0.178
-            # rows = 4, cols = 2
+            # Button positions based on Blender layout (same parameters as in get_ee_goals)
             start_x, start_y, start_z = -1.75, -0.92, 1.625
             dx, dz = -0.22, -0.178
             rows, cols = 4, 2
             
-            print(f"[DEBUG] Expected Button Positions (World Frame - from Blender layout):")
-            for r in range(rows):
-                for c in range(cols):
-                    x = start_x + c * dx
-                    y = start_y
-                    z = start_z + r * dz
-                    button_idx = r * cols + c
-                    if button_idx < len(button_body_names):
-                        print(f"  {button_body_names[button_idx]}: [{x:.4f}, {y:.4f}, {z:.4f}]")
-            
-            # Get button positions in world frame from articulation
-            button_body_ids = []
-            found_body_names = []
+            # Compute button positions in world frame from Blender layout
+            button_positions_w = []
             for body_name in button_body_names:
-                if body_name in elevator.data.body_names:
-                    body_id = list(elevator.data.body_names).index(body_name)
-                    button_body_ids.append(body_id)
-                    found_body_names.append(body_name)
-                else:
-                    print(f"[DEBUG] WARNING: Button body '{body_name}' not found in elevator.data.body_names")
+                # Parse row and col from button name (format: "button_<row>_<col>_link")
+                try:
+                    parts = body_name.split("_")
+                    if len(parts) >= 3 and parts[0] == "button":
+                        row = int(parts[1])
+                        col = int(parts[2])
+                        x = start_x + col * dx
+                        y = start_y
+                        z = start_z + row * dz
+                        button_positions_w.append([x, y, z])
+                    else:
+                        button_positions_w.append([start_x, start_y, start_z])
+                except (ValueError, IndexError):
+                    button_positions_w.append([start_x, start_y, start_z])
             
-            # Print all available body names for debugging
-            if len(button_body_ids) == 0:
-                print(f"[DEBUG] Available elevator body names: {list(elevator.data.body_names)[:20]}...")  # Print first 20
+            # Convert to numpy for printing
+            button_positions_w_np = torch.tensor(button_positions_w, device=agibot.device, dtype=torch.float32).cpu().numpy()
             
-            if len(button_body_ids) > 0:
-                button_body_ids_tensor = torch.tensor(button_body_ids, device=elevator.device, dtype=torch.long)
-                button_poses_w = elevator.data.body_pose_w[0, button_body_ids_tensor, :7]  # (num_buttons, 7)
-                button_positions_w = button_poses_w[:, :3].cpu().numpy()
-                
-                print(f"[DEBUG] Button Positions (World Frame - from articulation):")
-                for i, body_name in enumerate(found_body_names):
-                    if i < len(button_positions_w):
-                        pos = button_positions_w[i]
-                        print(f"  {body_name}: [{pos[0]:.4f}, {pos[1]:.4f}, {pos[2]:.4f}]")
-                
-                # Convert button positions to robot local frame (current robot pose)
-                root_w = agibot.data.root_pose_w[0:1, :]  # (1, 7)
-                robot_root_pos_w = root_w[:, :3]  # (1, 3)
-                robot_root_quat_w = root_w[:, 3:7]  # (1, 4)
-                
-                print(f"[DEBUG] Button Positions (Robot Local Frame):")
-                for i, body_name in enumerate(found_body_names):
-                    if i < len(button_body_ids_tensor):
-                        button_pos_w_i = button_poses_w[i:i+1, :3]  # (1, 3)
-                        button_quat_w_i = button_poses_w[i:i+1, 3:7]  # (1, 4)
-                        
-                        button_pos_b, button_quat_b = subtract_frame_transforms(
-                            robot_root_pos_w, robot_root_quat_w,
-                            button_pos_w_i, button_quat_w_i,
-                        )
-                        pos_b = button_pos_b[0, :].cpu().numpy()
-                        print(f"  {body_name}: [{pos_b[0]:.4f}, {pos_b[1]:.4f}, {pos_b[2]:.4f}]")
-                
-                # Print current goal position (robot local frame)
-                if goal_idx < right_arm_goals.shape[0]:
-                    current_goal = right_arm_goals[goal_idx, :3].cpu().numpy()
-                    print(f"[DEBUG] Current IK Goal Position (Robot Local Frame): [{current_goal[0]:.4f}, {current_goal[1]:.4f}, {current_goal[2]:.4f}]")
+            print(f"[DEBUG] Button Positions (World Frame - from Blender layout):")
+            for i, body_name in enumerate(button_body_names):
+                if i < len(button_positions_w_np):
+                    pos = button_positions_w_np[i]
+                    print(f"  {body_name}: [{pos[0]:.4f}, {pos[1]:.4f}, {pos[2]:.4f}]")
+            
+            # Convert button positions to robot local frame (current robot pose)
+            root_w = agibot.data.root_pose_w[0:1, :]  # (1, 7)
+            robot_root_pos_w = root_w[:, :3]  # (1, 3)
+            robot_root_quat_w = root_w[:, 3:7]  # (1, 4)
+            
+            button_positions_w_tensor = torch.tensor(button_positions_w, device=agibot.device, dtype=torch.float32)
+            
+            print(f"[DEBUG] Button Positions (Robot Local Frame):")
+            for i, body_name in enumerate(button_body_names):
+                if i < len(button_positions_w_tensor):
+                    button_pos_w_i = button_positions_w_tensor[i:i+1, :]  # (1, 3)
+                    button_quat_w_i = torch.tensor([[0.0, 0.0, 0.0, 1.0]], device=agibot.device)  # Identity quaternion
+                    
+                    button_pos_b, button_quat_b = subtract_frame_transforms(
+                        robot_root_pos_w, robot_root_quat_w,
+                        button_pos_w_i, button_quat_w_i,
+                    )
+                    pos_b = button_pos_b[0, :].cpu().numpy()
+                    print(f"  {body_name}: [{pos_b[0]:.4f}, {pos_b[1]:.4f}, {pos_b[2]:.4f}]")
+            
+            # Print current goal position (robot local frame)
+            if goal_idx < right_arm_goals.shape[0]:
+                current_goal = right_arm_goals[goal_idx, :3].cpu().numpy()
+                print(f"[DEBUG] Current IK Goal Position (Robot Local Frame): [{current_goal[0]:.4f}, {current_goal[1]:.4f}, {current_goal[2]:.4f}]")
             
             print(f"[DEBUG] ===========================================\n")
 
