@@ -28,8 +28,11 @@ import math
 import isaaclab.sim as sim_utils
 # import prims as prim_utils
 from isaaclab.assets import AssetBaseCfg, ArticulationCfg, Articulation
+from isaaclab.controllers import DifferentialIKController, DifferentialIKControllerCfg
+from isaaclab.managers import SceneEntityCfg
 from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
 from isaaclab.utils import configclass
+from isaaclab.utils.math import subtract_frame_transforms
 
 from cfg.agibot import AGIBOT_A2D_CFG
 from cfg.elevator import ELEVATOR_CFG
@@ -61,86 +64,88 @@ class ElevatorSceneCfg(InteractiveSceneCfg):
         ),
     )
 
-def set_robot_pose_demo(
-    agibot: Articulation, 
-    phase: float, 
-    right_joint_groups: dict[str, torch.Tensor],
-    robot_animation_range: float = 1.0,
-    sequential_linkages: bool = True,
-    fixed_shoulder_angles: torch.Tensor = None,
-):
-    """Set robot right arm joints based on phase for smooth animation.
+# -----------------------------------------------------------------------------
+# Get EE Goals (copied from ik_solver.py)
+# -----------------------------------------------------------------------------
+def get_ee_goals(
+    elevator: Articulation,
+    robot: Articulation,
+    button_body_names: list[str],
+    default_quat: torch.Tensor = None,
+) -> torch.Tensor:
+    """Get elevator button positions in world frame and convert to robot local frame.
     
     Args:
-        agibot: The robot articulation
-        phase: Normalized phase value [0, 1] for animation cycle
-        right_joint_groups: Dict mapping group names to tensors of right arm joint indices (e.g., {"shoulder": [...], "forearm": [...], "gripper": [...]})
-        robot_animation_range: Multiplier for animation range (default 1.0 = full 2π rotation)
-        sequential_linkages: If True, animates joint groups (forearm, gripper) sequentially (shoulder is fixed)
-        fixed_shoulder_angles: Optional tensor of fixed angles for shoulder joints [joint1, joint2, joint3]. 
-                               If None, uses default positions. Shape: (3,) or (num_envs, 3)
+        elevator: The elevator articulation
+        robot: The robot articulation (for root pose reference)
+        button_body_names: List of button body names (e.g., ["button_0_0_link", "button_0_1_link", ...])
+        default_quat: Default quaternion for button orientation [qx, qy, qz, qw]. 
+                      If None, uses identity quaternion [0, 0, 0, 1]
+    
+    Returns:
+        goals: Tensor of shape (num_buttons, 7) with [x, y, z, qx, qy, qz, qw] in robot local frame
+               Each row corresponds to one button goal
     """
-    # Get all right joint IDs from groups
-    all_right_ids = torch.cat([ids for ids in right_joint_groups.values()]) if right_joint_groups else torch.tensor([], dtype=torch.long, device=agibot.device)
+    device = elevator.device
     
-    if len(all_right_ids) == 0:
-        return
+    # Find button body IDs by matching body names
+    button_body_ids = []
+    for body_name in button_body_names:
+        if body_name in elevator.data.body_names:
+            body_id = list(elevator.data.body_names).index(body_name)
+            button_body_ids.append(body_id)
     
-    # Calculate joint positions based on phase (smooth rotation)
-    joint_pos_target = agibot.data.default_joint_pos.clone()
+    num_buttons = len(button_body_ids)
     
-    # Fix shoulder to specified fixed angles (don't animate it)
-    if "shoulder" in right_joint_groups:
-        shoulder_ids = right_joint_groups["shoulder"]
-        if fixed_shoulder_angles is not None:
-            # Use the provided fixed angles
-            if fixed_shoulder_angles.dim() == 1:
-                # (3,) -> (1, 3) for broadcasting
-                fixed_shoulder_angles = fixed_shoulder_angles.unsqueeze(0)
-            joint_pos_target[:, shoulder_ids] = fixed_shoulder_angles
-        else:
-            # Use default positions if no fixed angles provided
-            joint_pos_target[:, shoulder_ids] = agibot.data.default_joint_pos[:, shoulder_ids]
+    if num_buttons == 0:
+        return torch.zeros((0, 7), device=device)
     
-    # Get animatable groups (forearm and gripper, excluding shoulder)
-    animatable_groups = {name: ids for name, ids in right_joint_groups.items() if name != "shoulder"}
-    animatable_group_names = list(animatable_groups.keys())
-    num_animatable_groups = len(animatable_group_names)
+    button_body_ids_tensor = torch.tensor(button_body_ids, device=device, dtype=torch.long)
     
-    if sequential_linkages and num_animatable_groups > 0:
-        # Animate only forearm and gripper groups sequentially (shoulder is fixed)
-        group_phase_range = 1.0 / num_animatable_groups
-        for i, group_name in enumerate(animatable_group_names):
-            group_ids = animatable_groups[group_name]
-            group_start = i * group_phase_range
-            group_end = (i + 1) * group_phase_range
-            
-            if phase >= group_end:
-                # This group is complete, set to final position
-                animation_offset = (2 * torch.pi * robot_animation_range)
-                joint_pos_target[:, group_ids] = agibot.data.default_joint_pos[:, group_ids] - animation_offset
-            elif phase >= group_start:
-                # This group is currently animating
-                group_phase = (phase - group_start) / group_phase_range
-                animation_offset = group_phase * (2 * torch.pi * robot_animation_range)
-                joint_pos_target[:, group_ids] = agibot.data.default_joint_pos[:, group_ids] - animation_offset
-            else:
-                # This group hasn't started yet, keep at default position
-                joint_pos_target[:, group_ids] = agibot.data.default_joint_pos[:, group_ids]
+    # Get button body poses in world frame (use env 0)
+    # body_pose_w shape: (num_envs, num_bodies, 7) where last dim is [x, y, z, qx, qy, qz, qw]
+    button_poses_w = elevator.data.body_pose_w[0, button_body_ids_tensor, :]  # (num_buttons, 7)
+    
+    # Get robot root pose for frame transformation (use env 0)
+    robot_root_pos_w = robot.data.root_pose_w[0:1, :3]  # (1, 3) - batched for subtract_frame_transforms
+    robot_root_quat_w = robot.data.root_pose_w[0:1, 3:7]  # (1, 4) - batched for subtract_frame_transforms
+    
+    # Default quaternion for button orientation (identity if not provided)
+    if default_quat is None:
+        default_quat_w = torch.tensor([0.0, 0.0, 0.0, 1.0], device=device)  # [qx, qy, qz, qw]
     else:
-        # Animate all animatable joints together (shoulder is fixed)
-        animatable_ids = torch.cat([ids for ids in animatable_groups.values()]) if animatable_groups else torch.tensor([], dtype=torch.long, device=agibot.device)
-        if len(animatable_ids) > 0:
-            animation_offset = phase * (2 * torch.pi * robot_animation_range)
-            joint_pos_target[:, animatable_ids] = agibot.data.default_joint_pos[:, animatable_ids] - animation_offset
+        default_quat_w = default_quat
     
-    # Clamp to joint limits
-    joint_pos_target = joint_pos_target.clamp_(
-        agibot.data.soft_joint_pos_limits[..., 0], 
-        agibot.data.soft_joint_pos_limits[..., 1]
-    )
-    agibot.set_joint_position_target(joint_pos_target)
-    agibot.write_data_to_sim()
+    # Extract button positions and orientations from world frame
+    button_pos_w = button_poses_w[:, :3]  # (num_buttons, 3)
+    button_quat_w = button_poses_w[:, 3:7] if button_poses_w.shape[1] >= 7 else default_quat_w.unsqueeze(0).expand(num_buttons, 4)  # (num_buttons, 4)
+    
+    # Convert each button pose from world frame to robot local frame
+    goals_list = []
+    for button_idx in range(num_buttons):
+        # Extract single button pose (batched for subtract_frame_transforms)
+        button_pos_w_i = button_pos_w[button_idx:button_idx+1, :]  # (1, 3)
+        button_quat_w_i = button_quat_w[button_idx:button_idx+1, :]  # (1, 4)
+        
+        # Convert from world frame to robot local frame using subtract_frame_transforms
+        # Expects (num_envs, 3) and (num_envs, 4) shapes
+        button_pos_b, button_quat_b = subtract_frame_transforms(
+            robot_root_pos_w, robot_root_quat_w,
+            button_pos_w_i, button_quat_w_i,
+        )
+        
+        # Extract result (first and only env)
+        button_pos_b = button_pos_b[0, :]  # (3,)
+        button_quat_b = button_quat_b[0, :]  # (4,)
+        
+        # Combine position and quaternion: [x, y, z, qx, qy, qz, qw]
+        goal = torch.cat([button_pos_b, button_quat_b], dim=-1)  # (7,)
+        goals_list.append(goal)
+    
+    # Stack all goals: (num_buttons, 7)
+    goals = torch.stack(goals_list, dim=0)  # (num_buttons, 7)
+    
+    return goals
 
 
 def run_simulator(
@@ -149,10 +154,15 @@ def run_simulator(
     agibot: Articulation,
     elevator: Articulation,
     right_joint_groups: dict[str, torch.Tensor],
+    right_arm_joint_ids: torch.Tensor,  # All right arm joint IDs [1-7]
+    right_forearm_gripper_ids: torch.Tensor,  # Forearm and gripper joint IDs [4-7]
     elevator_door_ids: torch.Tensor,
     elevator_button_ids: torch.Tensor,
-    robot_animation_range: float,
-    fixed_shoulder_angles: torch.Tensor = None,
+    right_ik: DifferentialIKController,
+    right_cfg: SceneEntityCfg,
+    right_ee_jac: int,
+    right_arm_goals: torch.Tensor,
+    fixed_shoulder_angles: torch.Tensor,
 ):
     """Run the simulation loop with robot and elevator animations."""
     # Animation parameters
@@ -162,6 +172,9 @@ def run_simulator(
     close_delta = 0.0
 
     print("[INFO] Done. Close the window to exit.")
+
+    right_cmd = torch.zeros(scene.num_envs, 7, device=agibot.device)
+    goal_idx = 0
 
     while simulation_app.is_running():
         # Reset robot and elevator to default positions at the start of each period
@@ -180,11 +193,18 @@ def run_simulator(
             )
             elevator.reset()
             
+            # Move to next button goal
+            goal_idx = (goal_idx + 1) % right_arm_goals.shape[0]
+            # right_cmd shape: (num_envs, 7), right_arm_goals[goal_idx] shape: (7,)
+            # Need to expand to match batch dimension
+            right_cmd[:, :] = right_arm_goals[goal_idx].unsqueeze(0).expand(scene.num_envs, -1)
+            right_ik.reset()
+            right_ik.set_command(right_cmd)
+            
             count = 0
         
         # Calculate phase for animations
         phase = count % period
-        alpha = phase / max(1, period - 1)  # Normalized phase [0, 1] for robot animation
 
         # Calculate door animation delta based on phase
         if phase < 100:        # opening (first 100 frames)
@@ -214,12 +234,50 @@ def run_simulator(
         elevator.set_joint_position_target(joint_pos_target)
         elevator.write_data_to_sim()
 
-        # Update robot pose using phase-based animation (with sequential linkage movement)
-        set_robot_pose_demo(
-            agibot, alpha, right_joint_groups, robot_animation_range,
-            sequential_linkages=True,
-            fixed_shoulder_angles=fixed_shoulder_angles
+        # Compute IK for right arm (IK computes all joints [1-7], but we'll only use forearm/gripper [4-7])
+        root_w = agibot.data.root_pose_w
+        right_ee_w = agibot.data.body_pose_w[:, right_cfg.body_ids[0]]
+        right_jac = agibot.root_physx_view.get_jacobians()[:, right_ee_jac, :, right_cfg.joint_ids]
+        right_q = agibot.data.joint_pos[:, right_cfg.joint_ids]
+        
+        right_pos_b, right_quat_b = subtract_frame_transforms(
+            root_w[:, :3], root_w[:, 3:7],
+            right_ee_w[:, :3], right_ee_w[:, 3:7],
         )
+        
+        right_q_des_all = right_ik.compute(right_pos_b, right_quat_b, right_jac, right_q)
+        
+        # Build joint position target: fixed shoulder + IK-computed forearm/gripper
+        joint_pos_target = agibot.data.default_joint_pos.clone()
+        
+        # Set shoulder to fixed angles
+        if fixed_shoulder_angles is not None:
+            if fixed_shoulder_angles.dim() == 1:
+                fixed_shoulder_angles_batched = fixed_shoulder_angles.unsqueeze(0)
+            else:
+                fixed_shoulder_angles_batched = fixed_shoulder_angles
+            shoulder_ids = right_joint_groups["shoulder"]
+            joint_pos_target[:, shoulder_ids] = fixed_shoulder_angles_batched
+        
+        # Set forearm and gripper to IK-computed values
+        # right_q_des_all contains positions for joints in right_cfg.joint_ids (should be [1-7])
+        # Find which positions in right_q_des_all correspond to forearm/gripper joints
+        right_cfg_joint_ids_tensor = torch.tensor(right_cfg.joint_ids, device=agibot.device, dtype=torch.long)
+        forearm_gripper_mask = torch.isin(right_cfg_joint_ids_tensor, right_forearm_gripper_ids)
+        forearm_gripper_indices_in_ik = torch.where(forearm_gripper_mask)[0]
+        
+        if len(forearm_gripper_indices_in_ik) > 0:
+            # Extract IK-computed positions for forearm/gripper
+            forearm_gripper_ik_positions = right_q_des_all[:, forearm_gripper_indices_in_ik]
+            joint_pos_target[:, right_forearm_gripper_ids] = forearm_gripper_ik_positions
+        
+        # Clamp to joint limits
+        joint_pos_target = joint_pos_target.clamp_(
+            agibot.data.soft_joint_pos_limits[..., 0], 
+            agibot.data.soft_joint_pos_limits[..., 1]
+        )
+        agibot.set_joint_position_target(joint_pos_target)
+        agibot.write_data_to_sim()
 
         sim.step()
         scene.update(sim.get_physics_dt())
@@ -280,20 +338,59 @@ def main():
     elevator_button_ids, _ = elevator.find_joints(elevator_button_joint_names)
     elevator_button_ids = torch.as_tensor(elevator_button_ids, device=elevator.device, dtype=torch.long)
 
-    robot_animation_range = args_cli.robot_animation_range
-
     # Set fixed shoulder angles for positioning arm in front of body
     # Adjust these to position the arm forward (e.g., rotate joint1 more forward)
     # Values: [joint1, joint2, joint3] in radians
     fixed_shoulder_angles = torch.tensor([1.5, 0, 2], device=agibot.device)
 
+    # Setup IK controller for right arm
+    ik_cfg = DifferentialIKControllerCfg(
+        command_type="pose",
+        use_relative_mode=False,
+        ik_method="dls",
+    )
+    right_ik = DifferentialIKController(ik_cfg, scene.num_envs, agibot.device)
+
+    # Setup right arm scene entity (for IK computation)
+    right_cfg = SceneEntityCfg(
+        "agibot",
+        joint_names=["right_arm_joint[4-7]"],
+        body_names=["right_Right_Pad_Link"],
+    )
+    right_cfg.resolve(scene)
+
+    if agibot.is_fixed_base:
+        right_ee_jac = right_cfg.body_ids[0] - 1
+    else:
+        right_ee_jac = right_cfg.body_ids[0]
+
+    # Get all right arm joint IDs and forearm+gripper IDs
+    right_arm_joint_names = ["right_arm_joint1", "right_arm_joint2", "right_arm_joint3", 
+                              "right_arm_joint4", "right_arm_joint5", "right_arm_joint6", "right_arm_joint7"]
+    right_arm_joint_ids, _ = agibot.find_joints(right_arm_joint_names)
+    right_arm_joint_ids = torch.as_tensor(right_arm_joint_ids, device=agibot.device, dtype=torch.long)
+    
+    # Forearm and gripper joint IDs (4-7)
+    right_forearm_gripper_ids = torch.cat([
+        right_joint_groups["forearm"],
+        right_joint_groups["gripper"]
+    ])
+
+    # Get button goals (button body names need to be checked - using link names from ik_solver.py)
+    button_body_names = ["button_0_0_link", "button_0_1_link", "button_1_0_link", "button_1_1_link", 
+                         "button_2_0_link", "button_2_1_link", "button_3_0_link", "button_3_1_link"]
+    right_arm_goals = get_ee_goals(elevator, agibot, button_body_names)
+
     # Run the simulator
     run_simulator(
         sim, scene, agibot, elevator,
         right_joint_groups,
+        right_arm_joint_ids,
+        right_forearm_gripper_ids,
         elevator_door_ids, elevator_button_ids,
-        robot_animation_range,
-        fixed_shoulder_angles=fixed_shoulder_angles
+        right_ik, right_cfg, right_ee_jac,
+        right_arm_goals,
+        fixed_shoulder_angles
     )
 
     simulation_app.close()
