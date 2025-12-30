@@ -285,7 +285,7 @@ def main():
     # Set fixed shoulder angles for positioning arm in front of body
     # Adjust these to position the arm forward (e.g., rotate joint1 more forward)
     # Values: [joint1, joint2, joint3] in radians
-    fixed_shoulder_angles = torch.tensor([0.5, -0.5, -0.3], device=agibot.device)
+    fixed_shoulder_angles = torch.tensor([0.5, 0.5, -0.3], device=agibot.device)
 
     # Run the simulator
     run_simulator(
