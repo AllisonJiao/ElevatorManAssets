@@ -166,7 +166,7 @@ def get_ee_goals(
 # -----------------------------------------------------------------------------
 def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
-    robot = scene["robot"]
+    robot = scene["agibot"]
     device = robot.device
 
     # ---------------- IK controllers ----------------
