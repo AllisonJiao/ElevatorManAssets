@@ -67,6 +67,7 @@ def set_robot_pose_demo(
     right_joint_groups: dict[str, torch.Tensor],
     robot_animation_range: float = 1.0,
     sequential_linkages: bool = True,
+    fixed_shoulder_angles: torch.Tensor = None,
 ):
     """Set robot right arm joints based on phase for smooth animation.
     
@@ -75,7 +76,9 @@ def set_robot_pose_demo(
         phase: Normalized phase value [0, 1] for animation cycle
         right_joint_groups: Dict mapping group names to tensors of right arm joint indices (e.g., {"shoulder": [...], "forearm": [...], "gripper": [...]})
         robot_animation_range: Multiplier for animation range (default 1.0 = full 2π rotation)
-        sequential_linkages: If True, animates joint groups (shoulder, forearm, gripper) sequentially
+        sequential_linkages: If True, animates joint groups (forearm, gripper) sequentially (shoulder is fixed)
+        fixed_shoulder_angles: Optional tensor of fixed angles for shoulder joints [joint1, joint2, joint3]. 
+                               If None, uses default positions. Shape: (3,) or (num_envs, 3)
     """
     # Get all right joint IDs from groups
     all_right_ids = torch.cat([ids for ids in right_joint_groups.values()]) if right_joint_groups else torch.tensor([], dtype=torch.long, device=agibot.device)
@@ -86,10 +89,18 @@ def set_robot_pose_demo(
     # Calculate joint positions based on phase (smooth rotation)
     joint_pos_target = agibot.data.default_joint_pos.clone()
     
-    # Fix shoulder to default position (don't animate it)
+    # Fix shoulder to specified fixed angles (don't animate it)
     if "shoulder" in right_joint_groups:
         shoulder_ids = right_joint_groups["shoulder"]
-        joint_pos_target[:, shoulder_ids] = agibot.data.default_joint_pos[:, shoulder_ids]
+        if fixed_shoulder_angles is not None:
+            # Use the provided fixed angles
+            if fixed_shoulder_angles.dim() == 1:
+                # (3,) -> (1, 3) for broadcasting
+                fixed_shoulder_angles = fixed_shoulder_angles.unsqueeze(0)
+            joint_pos_target[:, shoulder_ids] = fixed_shoulder_angles
+        else:
+            # Use default positions if no fixed angles provided
+            joint_pos_target[:, shoulder_ids] = agibot.data.default_joint_pos[:, shoulder_ids]
     
     # Get animatable groups (forearm and gripper, excluding shoulder)
     animatable_groups = {name: ids for name, ids in right_joint_groups.items() if name != "shoulder"}
@@ -141,6 +152,7 @@ def run_simulator(
     elevator_door_ids: torch.Tensor,
     elevator_button_ids: torch.Tensor,
     robot_animation_range: float,
+    fixed_shoulder_angles: torch.Tensor = None,
 ):
     """Run the simulation loop with robot and elevator animations."""
     # Animation parameters
@@ -205,7 +217,8 @@ def run_simulator(
         # Update robot pose using phase-based animation (with sequential linkage movement)
         set_robot_pose_demo(
             agibot, alpha, right_joint_groups, robot_animation_range,
-            sequential_linkages=True
+            sequential_linkages=True,
+            fixed_shoulder_angles=fixed_shoulder_angles
         )
 
         sim.step()
@@ -269,12 +282,19 @@ def main():
 
     robot_animation_range = args_cli.robot_animation_range
 
+    # Set fixed shoulder angles for positioning arm in front of body
+    # Default right arm shoulder joints: [1.0817, -0.5907, -0.3442]
+    # Adjust these to position the arm forward (e.g., rotate joint1 more forward)
+    # Values: [joint1, joint2, joint3] in radians
+    fixed_shoulder_angles = torch.tensor([0.0, -0.5, -0.3], device=agibot.device)  # Adjust these values as needed
+
     # Run the simulator
     run_simulator(
         sim, scene, agibot, elevator,
         right_joint_groups,
         elevator_door_ids, elevator_button_ids,
-        robot_animation_range
+        robot_animation_range,
+        fixed_shoulder_angles=fixed_shoulder_angles
     )
 
     simulation_app.close()
