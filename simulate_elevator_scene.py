@@ -374,8 +374,8 @@ def main():
     # Setup right arm scene entity (for IK computation) - all joints [1-7]
     right_cfg = SceneEntityCfg(
         "agibot",
-        joint_names=["right_arm_joint[1-7]"],
-        body_names=["right_Right_Pad_Link"],
+        joint_names=["right_arm_joint.*"],
+        body_names=["right_gripper_center"],
     )
     right_cfg.resolve(scene)
 
