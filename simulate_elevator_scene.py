@@ -183,11 +183,15 @@ def run_simulator(
     right_arm_goals: torch.Tensor,
     fixed_shoulder_angles: torch.Tensor,
     button_body_names: list[str],
+    period: int = 1000,  # Increased default period to allow more time for IK to converge
 ):
-    """Run the simulation loop with robot and elevator animations."""
+    """Run the simulation loop with robot and elevator animations.
+    
+    Args:
+        period: Number of simulation steps per animation period. Longer periods give IK more time to converge.
+    """
     # Animation parameters
     count = 0
-    period = 500
     open_delta = -0.5  # 50 cm along chosen axis
     close_delta = 0.0
 
@@ -243,7 +247,7 @@ def run_simulator(
         joint_pos_target[:, elevator_door_ids] += delta
         
         # Update button positions - press down gradually over the period
-        # Button press animation: starts at 0, reaches max press at phase 0.5, stays pressed
+        # Button press animation: starts at 0, reaches max press at 50% of period, stays pressed
         button_press_delta = min(phase / (period / 2.0), 1.0) * 0.05  # Max press distance of 0.05
         joint_pos_target[:, elevator_button_ids] += button_press_delta
         
@@ -306,10 +310,10 @@ def run_simulator(
         if count % period == period - 1:  # Last frame of the period
             # Get end effector position in world frame (after update)
             right_ee_w_final = agibot.data.body_pose_w[0, right_cfg.body_ids[0], :7]  # [x, y, z, qx, qy, qz, qw]
-            right_ee_pos_w = right_ee_w_final[:3].cpu().numpy()
+            right_ee_pos_w_np = right_ee_w_final[:3].cpu().numpy()
             
-            print(f"\n[DEBUG] === Period End (goal_idx={goal_idx}) ===")
-            print(f"[DEBUG] Right End Effector Position (World Frame): [{right_ee_pos_w[0]:.4f}, {right_ee_pos_w[1]:.4f}, {right_ee_pos_w[2]:.4f}]")
+            print(f"\n[DEBUG] === Period End (goal_idx={goal_idx}, count={count}) ===")
+            print(f"[DEBUG] Right End Effector Position (World Frame): [{right_ee_pos_w_np[0]:.4f}, {right_ee_pos_w_np[1]:.4f}, {right_ee_pos_w_np[2]:.4f}]")
             
             # Button positions based on Blender layout (same parameters as in get_ee_goals)
             start_x, start_y, start_z = -1.75, -0.92, 1.625
@@ -363,10 +367,30 @@ def run_simulator(
                     pos_b = button_pos_b[0, :].cpu().numpy()
                     print(f"  {body_name}: [{pos_b[0]:.4f}, {pos_b[1]:.4f}, {pos_b[2]:.4f}]")
             
+            # Get current EE position in robot local frame
+            right_ee_pos_w = right_ee_w_final[:3].unsqueeze(0)  # (1, 3)
+            right_ee_quat_w = right_ee_w_final[3:7].unsqueeze(0)  # (1, 4)
+            
+            right_ee_pos_b, right_ee_quat_b = subtract_frame_transforms(
+                robot_root_pos_w, robot_root_quat_w,
+                right_ee_pos_w, right_ee_quat_w,
+            )
+            right_ee_pos_b_np = right_ee_pos_b[0, :].cpu().numpy()
+            
             # Print current goal position (robot local frame)
             if goal_idx < right_arm_goals.shape[0]:
                 current_goal = right_arm_goals[goal_idx, :3].cpu().numpy()
                 print(f"[DEBUG] Current IK Goal Position (Robot Local Frame): [{current_goal[0]:.4f}, {current_goal[1]:.4f}, {current_goal[2]:.4f}]")
+                
+                # Calculate error/distance between current EE and goal
+                current_ee_pos_b_tensor = right_ee_pos_b[0, :]  # (3,)
+                goal_pos_b_tensor = torch.tensor(current_goal, device=agibot.device, dtype=torch.float32)
+                error = torch.norm(current_ee_pos_b_tensor - goal_pos_b_tensor).cpu().item()
+                error_xyz = (current_ee_pos_b_tensor - goal_pos_b_tensor).cpu().numpy()
+                
+                print(f"[DEBUG] Current EE Position (Robot Local Frame): [{right_ee_pos_b_np[0]:.4f}, {right_ee_pos_b_np[1]:.4f}, {right_ee_pos_b_np[2]:.4f}]")
+                print(f"[DEBUG] Position Error (Goal - Current): [{error_xyz[0]:.4f}, {error_xyz[1]:.4f}, {error_xyz[2]:.4f}]")
+                print(f"[DEBUG] Distance to Goal: {error:.4f} m")
             
             print(f"[DEBUG] ===========================================\n")
 
@@ -479,7 +503,8 @@ def main():
         right_ik, right_cfg, right_ee_jac,
         right_arm_goals,
         fixed_shoulder_angles,
-        button_body_names
+        button_body_names,
+        period=args_cli.period
     )
 
     simulation_app.close()
