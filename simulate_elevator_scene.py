@@ -175,16 +175,12 @@ def run_simulator(
     scene: InteractiveScene,
     agibot: Articulation,
     elevator: Articulation,
-    right_joint_groups: dict[str, torch.Tensor],
-    right_arm_joint_ids: torch.Tensor,  # All right arm joint IDs [1-7]
-    right_forearm_gripper_ids: torch.Tensor,  # Forearm and gripper joint IDs [4-7]
     elevator_door_ids: torch.Tensor,
     elevator_button_ids: torch.Tensor,
     right_ik: DifferentialIKController,
     right_cfg: SceneEntityCfg,
     right_ee_jac: int,
     right_arm_goals: torch.Tensor,
-    fixed_shoulder_angles: torch.Tensor,
     button_body_names: list[str],
     goal_marker: VisualizationMarkers,
     period: int = 1000,  # Increased default period to allow more time for IK to converge
@@ -263,7 +259,7 @@ def run_simulator(
         elevator.set_joint_position_target(joint_pos_target)
         elevator.write_data_to_sim()
 
-        # Compute IK for right arm (IK computes all joints [1-7], but we'll only use forearm/gripper [4-7])
+        # Compute IK for right arm (all joints [1-7])
         root_w = agibot.data.root_pose_w
         right_ee_w = agibot.data.body_pose_w[:, right_cfg.body_ids[0]]
         right_jac = agibot.root_physx_view.get_jacobians()[:, right_ee_jac, :, right_cfg.joint_ids]
@@ -274,38 +270,11 @@ def run_simulator(
             right_ee_w[:, :3], right_ee_w[:, 3:7],
         )
         
-        right_q_des_all = right_ik.compute(right_pos_b, right_quat_b, right_jac, right_q)
+        right_q_des = right_ik.compute(right_pos_b, right_quat_b, right_jac, right_q)
         
-        # Build joint position target: fixed shoulder + IK-computed forearm/gripper
-        joint_pos_target = agibot.data.default_joint_pos.clone()
-        
-        # Set shoulder to fixed angles
-        if fixed_shoulder_angles is not None:
-            if fixed_shoulder_angles.dim() == 1:
-                fixed_shoulder_angles_batched = fixed_shoulder_angles.unsqueeze(0)
-            else:
-                fixed_shoulder_angles_batched = fixed_shoulder_angles
-            shoulder_ids = right_joint_groups["shoulder"]
-            joint_pos_target[:, shoulder_ids] = fixed_shoulder_angles_batched
-        
-        # Set forearm and gripper to IK-computed values
-        # right_q_des_all contains positions for joints in right_cfg.joint_ids (should be [1-7])
-        # Find which positions in right_q_des_all correspond to forearm/gripper joints
-        right_cfg_joint_ids_tensor = torch.tensor(right_cfg.joint_ids, device=agibot.device, dtype=torch.long)
-        forearm_gripper_mask = torch.isin(right_cfg_joint_ids_tensor, right_forearm_gripper_ids)
-        forearm_gripper_indices_in_ik = torch.where(forearm_gripper_mask)[0]
-        
-        if len(forearm_gripper_indices_in_ik) > 0:
-            # Extract IK-computed positions for forearm/gripper
-            forearm_gripper_ik_positions = right_q_des_all[:, forearm_gripper_indices_in_ik]
-            joint_pos_target[:, right_forearm_gripper_ids] = forearm_gripper_ik_positions
-        
-        # Clamp to joint limits
-        joint_pos_target = joint_pos_target.clamp_(
-            agibot.data.soft_joint_pos_limits[..., 0], 
-            agibot.data.soft_joint_pos_limits[..., 1]
-        )
-        agibot.set_joint_position_target(joint_pos_target)
+        # Apply IK-computed joint positions directly to the robot
+        # right_q_des contains positions for all joints in right_cfg.joint_ids [1-7]
+        agibot.set_joint_position_target(right_q_des, right_cfg.joint_ids)
         agibot.write_data_to_sim()
 
         sim.step()
@@ -446,35 +415,6 @@ def main():
     agibot: Articulation = scene["agibot"]
     elevator: Articulation = scene["elevator"]
 
-    # Setup robot joint animation - organize right arm into groups: shoulder (1-3), forearm (4-5), gripper (6-7)
-    right_shoulder_names = ["right_arm_joint1", "right_arm_joint2", "right_arm_joint3"]
-    right_forearm_names = ["right_arm_joint4", "right_arm_joint5"]
-    right_gripper_names = ["right_arm_joint6", "right_arm_joint7"]
-
-    # Find joint indices for each group
-    right_shoulder_ids, _ = agibot.find_joints(right_shoulder_names)
-    right_forearm_ids, _ = agibot.find_joints(right_forearm_names)
-    right_gripper_ids, _ = agibot.find_joints(right_gripper_names)
-
-    # Organize into groups
-    right_joint_groups = {
-        "shoulder": torch.as_tensor(right_shoulder_ids, device=agibot.device, dtype=torch.long),
-        "forearm": torch.as_tensor(right_forearm_ids, device=agibot.device, dtype=torch.long),
-        "gripper": torch.as_tensor(right_gripper_ids, device=agibot.device, dtype=torch.long),
-    }
-
-    total_right = sum(len(ids) for ids in right_joint_groups.values())
-
-    if total_right > 0:
-        print(f"[INFO] Organized right arm joints into groups:")
-        print(f"  Right arm - Shoulder: {len(right_joint_groups['shoulder'])}, Forearm: {len(right_joint_groups['forearm'])}, Gripper: {len(right_joint_groups['gripper'])}")
-
-        # Ensure data is updated
-        scene.update(sim.get_physics_dt())
-    else:
-        right_joint_groups = {}
-        print("[WARN] No right arm joints found for animation. Robot will use default pose.")
-
     elevator_door_joint_names = ["door2_joint"]
     elevator_door_ids, _ = elevator.find_joints(elevator_door_joint_names)
     elevator_door_ids = torch.as_tensor(elevator_door_ids, device=elevator.device, dtype=torch.long)
@@ -482,11 +422,6 @@ def main():
     elevator_button_joint_names = ["button_0_0_joint", "button_0_1_joint", "button_1_0_joint", "button_1_1_joint", "button_2_0_joint", "button_2_1_joint", "button_3_0_joint", "button_3_1_joint"]
     elevator_button_ids, _ = elevator.find_joints(elevator_button_joint_names)
     elevator_button_ids = torch.as_tensor(elevator_button_ids, device=elevator.device, dtype=torch.long)
-
-    # Set fixed shoulder angles for positioning arm in front of body
-    # Adjust these to position the arm forward (e.g., rotate joint1 more forward)
-    # Values: [joint1, joint2, joint3] in radians
-    fixed_shoulder_angles = torch.tensor([1.5, 0, 2], device=agibot.device)
 
     # Setup IK controller for right arm
     ik_cfg = DifferentialIKControllerCfg(
@@ -496,10 +431,10 @@ def main():
     )
     right_ik = DifferentialIKController(ik_cfg, scene.num_envs, agibot.device)
 
-    # Setup right arm scene entity (for IK computation)
+    # Setup right arm scene entity (for IK computation) - all joints [1-7]
     right_cfg = SceneEntityCfg(
         "agibot",
-        joint_names=["right_arm_joint[4-7]"],
+        joint_names=["right_arm_joint[1-7]"],
         body_names=["right_Right_Pad_Link"],
     )
     right_cfg.resolve(scene)
@@ -508,18 +443,6 @@ def main():
         right_ee_jac = right_cfg.body_ids[0] - 1
     else:
         right_ee_jac = right_cfg.body_ids[0]
-
-    # Get all right arm joint IDs and forearm+gripper IDs
-    right_arm_joint_names = ["right_arm_joint1", "right_arm_joint2", "right_arm_joint3", 
-                              "right_arm_joint4", "right_arm_joint5", "right_arm_joint6", "right_arm_joint7"]
-    right_arm_joint_ids, _ = agibot.find_joints(right_arm_joint_names)
-    right_arm_joint_ids = torch.as_tensor(right_arm_joint_ids, device=agibot.device, dtype=torch.long)
-    
-    # Forearm and gripper joint IDs (4-7)
-    right_forearm_gripper_ids = torch.cat([
-        right_joint_groups["forearm"],
-        right_joint_groups["gripper"]
-    ])
 
     # Get button goals (button body names need to be checked - using link names from ik_solver.py)
     button_body_names = ["button_0_0_link", "button_0_1_link", "button_1_0_link", "button_1_1_link", 
@@ -531,16 +454,15 @@ def main():
     frame_cfg.markers["frame"].scale = (0.1, 0.1, 0.1)  # Make marker visible but not too large
     goal_marker = VisualizationMarkers(frame_cfg.replace(prim_path="/Visuals/right_goal"))
 
+    # Ensure data is updated
+    scene.update(sim.get_physics_dt())
+
     # Run the simulator
     run_simulator(
         sim, scene, agibot, elevator,
-        right_joint_groups,
-        right_arm_joint_ids,
-        right_forearm_gripper_ids,
         elevator_door_ids, elevator_button_ids,
         right_ik, right_cfg, right_ee_jac,
         right_arm_goals,
-        fixed_shoulder_angles,
         button_body_names,
         goal_marker,
         period=args_cli.period
