@@ -1,0 +1,27 @@
+#usda 1.0
+(
+    customLayerData = {
+        dictionary omni_layer = {
+            dictionary locked = {
+            }
+            dictionary muteness = {
+            }
+        }
+        dictionary physicsSettings = {
+            int "/persistent/simulation/minFrameRate" = 10
+            bool "/physics/updateParticlesToUsd" = 0
+            bool "/physics/updateToUsd" = 0
+            bool "/physics/updateVelocitiesToUsd" = 0
+        }
+    }
+    endTimeCode = 3600
+    metersPerUnit = 1
+    startTimeCode = 60
+    subLayers = [
+        @layer_over.usda@,
+        @layer_root.usda@
+    ]
+    timeCodesPerSecond = 60
+    upAxis = "Z"
+)
+
