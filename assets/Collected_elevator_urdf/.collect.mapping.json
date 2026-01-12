@@ -1,4 +1,53 @@
 {
     "version": "1.0",
-    "file_records": []
+    "file_records": [
+        {
+            "source_url": "/isaaclab/ElevatorManAssets/assets/elevator/configuration/materials/textures/2.png",
+            "source_hash": "5d3b3395b4d44f4267a26d0306dc03bae9c63ba2",
+            "target_url": "./SubUSDs/textures/2.png",
+            "target_hash": "6546dd2a7ba0b56d247ee1d108026cb2e2cc219e"
+        },
+        {
+            "source_url": "/isaaclab/ElevatorManAssets/assets/elevator/configuration/materials/textures/3.png",
+            "source_hash": "08ec2932791504a4ac8ee2f7728878dd28c11471",
+            "target_url": "./SubUSDs/textures/3.png",
+            "target_hash": "aad31a1482bd0181fb510851a523b8d1158b8902"
+        },
+        {
+            "source_url": "/isaaclab/ElevatorManAssets/assets/elevator/configuration/materials/textures/4.png",
+            "source_hash": "912d7f3cc3b9243e3685e183e3349ef7b5ecc7b8",
+            "target_url": "./SubUSDs/textures/4.png",
+            "target_hash": "1dbe3b0d73b9a6ff18f37a4acc27274573bcd1e0"
+        },
+        {
+            "source_url": "/isaaclab/ElevatorManAssets/assets/elevator/configuration/materials/textures/5.png",
+            "source_hash": "45447fc61f9a5ec8b2ea841f9633f027079fe73c",
+            "target_url": "./SubUSDs/textures/5.png",
+            "target_hash": "e4e5a786d4dc647a49c17bcbe6caf8ec9a742206"
+        },
+        {
+            "source_url": "/isaaclab/ElevatorManAssets/assets/elevator/configuration/materials/textures/6.png",
+            "source_hash": "02ca03838aafced0944b3061734813cf47f0158f",
+            "target_url": "./SubUSDs/textures/6.png",
+            "target_hash": "ac45a8bcf774f87dfe342c19db11d00988350111"
+        },
+        {
+            "source_url": "/isaaclab/ElevatorManAssets/assets/elevator/configuration/materials/textures/G.png",
+            "source_hash": "8a09d9e8a5ad3cd020d5a39248e2c6f3effa4a56",
+            "target_url": "./SubUSDs/textures/G.png",
+            "target_hash": "a4c8fdfbd044277e2576e1eacb6defb0d77b6073"
+        },
+        {
+            "source_url": "/isaaclab/ElevatorManAssets/assets/elevator/configuration/materials/textures/close.png",
+            "source_hash": "8d6c9f689818cc8b3dfa6e40141f040eb6454cad",
+            "target_url": "./SubUSDs/textures/close.png",
+            "target_hash": "d334fb5dd4fa03bd497afe391b9e2cefda23aac7"
+        },
+        {
+            "source_url": "/isaaclab/ElevatorManAssets/assets/elevator/configuration/materials/textures/open.png",
+            "source_hash": "b771eb656c00394e564937665092ab467dd8e2d3",
+            "target_url": "./SubUSDs/textures/open.png",
+            "target_hash": "699f857d61352ca5f1ff1ff7238639838083950e"
+        }
+    ]
 }
