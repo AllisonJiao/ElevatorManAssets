@@ -33,7 +33,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="ground_button.dae" scale="1 1 1"/>
+        <mesh filename="button_ground.dae" scale="1 1 1"/>
       </geometry>
     </visual>
 
@@ -65,7 +65,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="2_button.dae" scale="1 1 1"/>
+        <mesh filename="button_2.dae" scale="1 1 1"/>
       </geometry>
     </visual>
 
@@ -97,7 +97,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="3_button.dae" scale="1 1 1"/>
+        <mesh filename="button_3.dae" scale="1 1 1"/>
       </geometry>
     </visual>
 
@@ -129,7 +129,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="4_button.dae" scale="1 1 1"/>
+        <mesh filename="button_4.dae" scale="1 1 1"/>
       </geometry>
     </visual>
 
@@ -161,7 +161,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="5_button.dae" scale="1 1 1"/>
+        <mesh filename="button_5.dae" scale="1 1 1"/>
       </geometry>
     </visual>
 
@@ -184,7 +184,7 @@
     <child link="button_2_0_link"/>
     <origin xyz="-1.75 0.24119 1.269" rpy="0 0 0"/>
     <!-- Press direction: -Y -->
-    <axis xyz="-1.75 -1 0"/>
+    <axis xyz="0 -1 0"/>
     <!-- 1 cm travel -->
     <limit lower="0.0" upper="0.01" effort="20" velocity="0.2"/>
   </joint>
@@ -193,7 +193,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="6_button.dae" scale="1 1 1"/>
+        <mesh filename="button_6.dae" scale="1 1 1"/>
       </geometry>
     </visual>
 
@@ -225,7 +225,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="open_button.dae" scale="1 1 1"/>
+        <mesh filename="button_open.dae" scale="1 1 1"/>
       </geometry>
     </visual>
 
@@ -257,7 +257,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="close_button.dae" scale="1 1 1"/>
+        <mesh filename="button_close.dae" scale="1 1 1"/>
       </geometry>
     </visual>
 
