@@ -33,7 +33,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="button_ground.dae" scale="1 1 1"/>
+        <mesh filename="button_5.dae" scale="1 1 1"/>
       </geometry>
     </visual>
 
@@ -65,7 +65,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="button_2.dae" scale="1 1 1"/>
+        <mesh filename="button_6.dae" scale="1 1 1"/>
       </geometry>
     </visual>
 
@@ -161,7 +161,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="button_5.dae" scale="1 1 1"/>
+        <mesh filename="button_ground.dae" scale="1 1 1"/>
       </geometry>
     </visual>
 
@@ -193,7 +193,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="button_6.dae" scale="1 1 1"/>
+        <mesh filename="button_2.dae" scale="1 1 1"/>
       </geometry>
     </visual>
 
