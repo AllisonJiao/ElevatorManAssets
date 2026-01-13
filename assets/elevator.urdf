@@ -313,7 +313,7 @@
   <joint name="door2_joint" type="prismatic">
     <parent link="cabin_link"/>
     <child link="door2_link"/>
-    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <origin xyz="-0.22 0.09 1.37" rpy="0 0 0"/>
 
     <!-- slides along -X using negative limit -->
     <axis xyz="1 0 0"/>
