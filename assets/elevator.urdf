@@ -48,6 +48,12 @@
     </inertial>
   </link>
 
+  <joint name="panel_joint" type="fixed">
+    <parent link="cabin_link"/>
+    <child link="panel_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
   <!-- =========================
        Buttons (static collision)
        ========================= -->
