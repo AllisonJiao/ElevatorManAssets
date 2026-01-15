@@ -1,0 +1,107 @@
+{
+    "version": "1.0",
+    "file_records": [
+        {
+            "source_url": "/isaaclab/anim_recordings/2026_01_15_215831/baked_animation_recording.usda",
+            "source_hash": "bb33b6af153c1bb03b81e15bcf6f6cf6abc4ccf7",
+            "target_url": "./baked_animation_recording.usd",
+            "target_hash": "fc0fba74932c891ac9dce48e8a8cfb1c17be8df4"
+        },
+        {
+            "source_url": "/isaaclab/anim_recordings/2026_01_15_215831/layer_over.usda",
+            "source_hash": "bc75a3cae278eda265e1a5511de8e420e0f41103",
+            "target_url": "./layer_over.usd",
+            "target_hash": "2e6b2a84c318d5a01e11f8a9ca9c5c36441a75fa"
+        },
+        {
+            "source_url": "/isaaclab/anim_recordings/2026_01_15_215831/layer_root.usda",
+            "source_hash": "5de23d4331e40461c792d45390fb58d49c3f9d66",
+            "target_url": "./layer_root.usd",
+            "target_hash": "baadc87cf9c3c7da9f5ae5306e832733441ec742"
+        },
+        {
+            "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1/Isaac/Environments/Grid/Materials/Textures/WireframeBlur_basecolor.png",
+            "source_hash": "981013c4855f01411ccf74e5b7cabb6b2155f516",
+            "target_url": "./omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1/Isaac/Environments/Grid/Materials/Textures/WireframeBlur_basecolor.png",
+            "target_hash": "dcadda48849637e42692522846a283f9739d9f2c"
+        },
+        {
+            "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1/Isaac/Environments/Grid/Materials/Textures/WireframeBlur_blue.png",
+            "source_hash": "6a989a8128b8101db37167f421473d22ed2c4eee",
+            "target_url": "./omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1/Isaac/Environments/Grid/Materials/Textures/WireframeBlur_blue.png",
+            "target_hash": "7686602d1d0fda0150b1a9cf38f6e6e4034d6085"
+        },
+        {
+            "source_url": "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1/Isaac/Environments/Grid/Materials/Textures/Wireframe_blue.png",
+            "source_hash": "089460953c4996cc198cc79b811cc311a439ad43",
+            "target_url": "./omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1/Isaac/Environments/Grid/Materials/Textures/Wireframe_blue.png",
+            "target_hash": "b1a518d845c236b205c7726ddfd5e936a08629c8"
+        },
+        {
+            "source_url": "/isaaclab/IsaacLab-ElevatorMan/assets/textures/color_121212.hdr",
+            "source_hash": "6d28321a09783436d1c8591a950ece2d39433a78",
+            "target_url": "./IsaacLab-ElevatorMan/assets/textures/color_121212.hdr",
+            "target_hash": "9f244df8f67685332ce0be9d75aed2c4ab3286d3"
+        },
+        {
+            "source_url": "/isaaclab/IsaacLab-ElevatorMan/assets/screens/textures/4_up.png",
+            "source_hash": "f2f52c0e7b03c5d121d32a5ff0ff48c752206a0b",
+            "target_url": "./IsaacLab-ElevatorMan/assets/screens/textures/4_up.png",
+            "target_hash": "5501ffee60e21bcda616ce5586ad13bb104ca586"
+        },
+        {
+            "source_url": "/isaaclab/IsaacLab-ElevatorMan/assets/screens/textures/color_121212.hdr",
+            "source_hash": "6d28321a09783436d1c8591a950ece2d39433a78",
+            "target_url": "./IsaacLab-ElevatorMan/assets/screens/textures/color_121212.hdr",
+            "target_hash": "a294e5b90417bc6560899e3faec5ba6de6aa5966"
+        },
+        {
+            "source_url": "/isaaclab/IsaacLab-ElevatorMan/assets/elevator/configuration/materials/textures/2.png",
+            "source_hash": "f2fd40c09d411a59e8e0ccade1c64a5dea404e43",
+            "target_url": "./IsaacLab-ElevatorMan/assets/elevator/configuration/materials/textures/2.png",
+            "target_hash": "fa73328bff0f995e22cdb1ffadc88b4c499601d3"
+        },
+        {
+            "source_url": "/isaaclab/IsaacLab-ElevatorMan/assets/elevator/configuration/materials/textures/3.png",
+            "source_hash": "15b3c595182516bb6125d9a36538f6edb5cd70be",
+            "target_url": "./IsaacLab-ElevatorMan/assets/elevator/configuration/materials/textures/3.png",
+            "target_hash": "758d872cf8289b81eee20715f71ce943136ada21"
+        },
+        {
+            "source_url": "/isaaclab/IsaacLab-ElevatorMan/assets/elevator/configuration/materials/textures/4.png",
+            "source_hash": "3dcb7da0c1c17edcc2b55c38f9bae8aaee9e1778",
+            "target_url": "./IsaacLab-ElevatorMan/assets/elevator/configuration/materials/textures/4.png",
+            "target_hash": "2ee3552bbc8903cb212f9c11a86270d728bc851f"
+        },
+        {
+            "source_url": "/isaaclab/IsaacLab-ElevatorMan/assets/elevator/configuration/materials/textures/5.png",
+            "source_hash": "9d2d90edee8fc2a4d041dddccc78918a88965c18",
+            "target_url": "./IsaacLab-ElevatorMan/assets/elevator/configuration/materials/textures/5.png",
+            "target_hash": "173618d645a487174d55dbc5326bf0bf18b38301"
+        },
+        {
+            "source_url": "/isaaclab/IsaacLab-ElevatorMan/assets/elevator/configuration/materials/textures/6.png",
+            "source_hash": "d0ae0264f02c78e2e8aa12dc71e8500baf3dc147",
+            "target_url": "./IsaacLab-ElevatorMan/assets/elevator/configuration/materials/textures/6.png",
+            "target_hash": "f8a11caf57e500c10f0935a1c7de75309d36231b"
+        },
+        {
+            "source_url": "/isaaclab/IsaacLab-ElevatorMan/assets/elevator/configuration/materials/textures/G.png",
+            "source_hash": "bbd301d160c229dfb9a569dd83db98a5866d6f38",
+            "target_url": "./IsaacLab-ElevatorMan/assets/elevator/configuration/materials/textures/G.png",
+            "target_hash": "ebc91402ad85427cbd77cf357356aef37cf8504b"
+        },
+        {
+            "source_url": "/isaaclab/IsaacLab-ElevatorMan/assets/elevator/configuration/materials/textures/close.png",
+            "source_hash": "831139e9846bd89bf48ad4848696fd41e009e1cb",
+            "target_url": "./IsaacLab-ElevatorMan/assets/elevator/configuration/materials/textures/close.png",
+            "target_hash": "e6b44570f19cda97cd25c3164fd5cdd4dd68d266"
+        },
+        {
+            "source_url": "/isaaclab/IsaacLab-ElevatorMan/assets/elevator/configuration/materials/textures/open.png",
+            "source_hash": "b18d561f7df1978564e480ab1e3cca21c42c0f7d",
+            "target_url": "./IsaacLab-ElevatorMan/assets/elevator/configuration/materials/textures/open.png",
+            "target_hash": "dd66531a1693e1ba120435219d7a6c7e3695c1a0"
+        }
+    ]
+}
