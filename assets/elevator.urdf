@@ -8,7 +8,7 @@
     <visual>
       <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <mesh filename="static_elevator.dae" scale="1 1 1"/>
+        <mesh filename="elevator_wall.dae" scale="1 1 1"/>
       </geometry>
     </visual>
 
