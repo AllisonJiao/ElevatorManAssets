@@ -5,13 +5,13 @@
       <author>Blender User</author>
       <authoring_tool>Blender 4.3.2 commit date:2024-12-16, commit time:21:10, hash:32f5fdce0a0a</authoring_tool>
     </contributor>
-    <created>2026-01-14T11:48:26</created>
-    <modified>2026-01-14T11:48:26</modified>
+    <created>2026-01-22T15:49:27</created>
+    <modified>2026-01-22T15:49:27</modified>
     <unit name="meter" meter="1"/>
     <up_axis>Z_UP</up_axis>
   </asset>
   <library_effects>
-    <effect id="ElevatorMetal-effect">
+    <effect id="ElevatorMetal_002-effect">
       <profile_COMMON>
         <technique sid="common">
           <lambert>
@@ -34,8 +34,8 @@
   </library_effects>
   <library_images/>
   <library_materials>
-    <material id="ElevatorMetal-material" name="ElevatorMetal">
-      <instance_effect url="#ElevatorMetal-effect"/>
+    <material id="ElevatorMetal_002-material" name="ElevatorMetal.002">
+      <instance_effect url="#ElevatorMetal_002-effect"/>
     </material>
   </library_materials>
   <library_geometries>
@@ -73,7 +73,7 @@
         <vertices id="Cube_001-mesh-vertices">
           <input semantic="POSITION" source="#Cube_001-mesh-positions"/>
         </vertices>
-        <triangles material="ElevatorMetal-material" count="68">
+        <triangles material="ElevatorMetal_002-material" count="68">
           <input semantic="VERTEX" source="#Cube_001-mesh-vertices" offset="0"/>
           <input semantic="NORMAL" source="#Cube_001-mesh-normals" offset="1"/>
           <input semantic="TEXCOORD" source="#Cube_001-mesh-map-0" offset="2" set="0"/>
@@ -85,11 +85,11 @@
   <library_visual_scenes>
     <visual_scene id="Scene" name="Scene">
       <node id="ElevatorPanel" name="ElevatorPanel" type="NODE">
-        <matrix sid="transform">0.4606721 0 0 -1.860723 0 0.03873595 0 0.1686116 0 0 0.6999287 1.574515 0 0 0 1</matrix>
+        <matrix sid="transform">0.4606721 0 0 -1.860723 0 0.03873595 0 0.269002 0 0 0.6999287 1.574515 0 0 0 1</matrix>
         <instance_geometry url="#Cube_001-mesh" name="ElevatorPanel">
           <bind_material>
             <technique_common>
-              <instance_material symbol="ElevatorMetal-material" target="#ElevatorMetal-material">
+              <instance_material symbol="ElevatorMetal_002-material" target="#ElevatorMetal_002-material">
                 <bind_vertex_input semantic="UVMap" input_semantic="TEXCOORD" input_set="0"/>
               </instance_material>
             </technique_common>
